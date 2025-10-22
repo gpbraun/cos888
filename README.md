@@ -2,14 +2,14 @@
 
 Otimização Combinatória II
 
-# The problem
+## The problem
 
-...
+Capacitated facility location: https://people.brunel.ac.uk/~mastjjb/jeb/orlib/capinfo.html
 
-# 1. Relax and Cut
+## 1. Relax and Cut
 
-# 2. Constraint Programming
+## 2. Constraint Programming
 
-# 3. Benders Decomposition
+## 3. Benders Decomposition
 
-# 4. Column Generation
+## 4. Column Generation

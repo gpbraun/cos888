@@ -16,18 +16,11 @@
     "**/__pycache__": true
   },
   "code-runner.executorMap": {
-    "cpp": "cd $dir && g++ $fileName -lcp -lcplex -lconcert -lpthread -ldl -lm -o $fileNameWithoutExt && $dir$fileNameWithoutExt"
+    "cpp": "cd $dir && g++ $fileName -lcp -lilocplex -lcplex -lconcert -lpthread -ldl -lm -o $fileNameWithoutExt && $dir$fileNameWithoutExt"
   },
   "terminal.integrated.env.linux": {
     "CPLEX": "/opt/ibm/ILOG/CPLEX_Studio2211",
     "CPLUS_INCLUDE_PATH": "${env:CPLEX}/concert/include:${env:CPLEX}/cplex/include:${env:CPLEX}/cpoptimizer/include:${env:CPLEX}",
     "LIBRARY_PATH": "${env:CPLEX}/cpoptimizer/lib/x86-64_linux:${env:CPLEX}/concert/lib/x86-64_linux:${env:CPLEX}/cplex/lib/x86-64_linux:${env:LIBRARY_PATH}"
-  },
-  "files.associations": {
-    "*.cls": "latex-expl3",
-    "*.sty": "latex-expl3",
-    "*.css": "tailwindcss",
-    "*.md": "markdown",
-    "ostream": "cpp"
   }
 }
