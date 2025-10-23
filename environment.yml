@@ -6,5 +6,6 @@ dependencies:
   - pip
   - gxx=12
   - pip:
+      - numpy
       - docplex
       - cplex
