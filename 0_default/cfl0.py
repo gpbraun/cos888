@@ -239,7 +239,7 @@ def main():
     """
     Rotina principal
     """
-    PATH = "/home/braun/Documents/Developer/cos888/instances/cfl/cap41.txt"
+    PATH = "instances/cfl/cfl_41.txt"
 
     instance = CFLInstance.from_orlib(PATH)
     print(f"m={instance.m}, n={instance.n}")
