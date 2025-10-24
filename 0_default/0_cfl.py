@@ -22,6 +22,7 @@ class CFLInstance:
 
     nI: int  # |I| plantas
     nJ: int  # |J| clientes
+
     f: np.ndarray  # f_i = custo fixo da planta i
     c: np.ndarray  # c_ij = custo unitário planta i -> cliente j
     p: np.ndarray  # p_i = capacidade da planta i
@@ -86,9 +87,6 @@ def solve_instance(inst: CFLInstance, log_output: bool = True):
     cost_transport = mdl.sum(inst.c[i, j] * x[i, j] for i, j in inst.IJ)
 
     mdl.minimize(cost_fixed + cost_transport)
-
-    # configurações do solver
-    mdl.parameters.threads = 1
 
     sol = mdl.solve()
 

@@ -9,6 +9,7 @@ Gabriel Braun, 2025
 from dataclasses import dataclass
 from itertools import product
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 from docplex.mp.model import Model
@@ -20,238 +21,341 @@ class CFLInstance:
     Instância do CFL
     """
 
-    m: int
-    n: int
-    f_cap: np.ndarray  # (m,)
-    f_cst: np.ndarray  # (m,)
-    c_dem: np.ndarray  # (n,)
-    c_cst: np.ndarray  # (m, n)
+    nI: int  # |I| plantas
+    nJ: int  # |J| clientes
+
+    f: np.ndarray  # f_i = custo fixo da planta i
+    c: np.ndarray  # c_ij = custo unitário planta i -> cliente j
+    p: np.ndarray  # p_i = capacidade da planta i
+    r: np.ndarray  # r_j = demanda do cliente j
+
+    @property
+    def I(self) -> list[int]:
+        return list(range(self.nI))
+
+    @property
+    def J(self) -> list[int]:
+        return list(range(self.nJ))
+
+    @property
+    def IJ(self) -> list[tuple[int]]:
+        return list(product(self.I, self.J))
 
     @classmethod
-    def from_orlib(cls, path: str) -> "CFLInstance":
+    def from_txt(cls, path: str) -> "CFLInstance":
         """
         Retorna: Instância a partir de um arquivo de instância .txt
         """
         arr = np.fromstring(Path(path).read_text(), sep=" ", dtype=float)
 
-        m = int(arr[0])
-        n = int(arr[1])
-
+        nI, nJ = arr[:2].astype(int)
         data = arr[2:]
 
-        facility_data = data[: 2 * m].reshape(m, 2)
-        f_cap = facility_data[:, 0]
-        f_cst = facility_data[:, 1]
+        facility_data = data[: 2 * nI].reshape(nI, 2)
+        p = facility_data[:, 0]
+        f = facility_data[:, 1]
 
-        customer_data = data[2 * m :].reshape(n, 1 + m)
-        c_dem = customer_data[:, 0]
-        c_cst = customer_data[:, 1:].T / c_dem[None, :]
+        customer_data = data[2 * nI :].reshape(nJ, 1 + nI)
+        r = customer_data[:, 0]
+        c = customer_data[:, 1:].T / r[None, :]
 
-        return cls(m=m, n=n, f_cap=f_cap, f_cst=f_cst, c_dem=c_dem, c_cst=c_cst)
+        return cls(nI=nI, nJ=nJ, f=f, p=p, r=r, c=c)
 
 
 def solve_instance(inst: CFLInstance, log_output: bool = True):
     """
     Resolve a instância usando o CPLEX.
     """
-    F = range(inst.m)
-    C = range(inst.n)
-
     mdl = Model(name="CFL", log_output=log_output)
 
     # variáveis
-    x = mdl.binary_var_list(inst.m, name="x")
-    y = mdl.continuous_var_dict(((i, j) for i in C for j in F), lb=0.0, name="y")
+    a = mdl.binary_var_dict(inst.I, name="a")
+    x = mdl.continuous_var_dict(inst.IJ, lb=0.0, name="x")
 
     # restrições
     mdl.add_constraints_(
-        (mdl.sum(y[i, j] for i in C) <= inst.f_cap[j] * x[j]) for j in F
+        (mdl.sum(x[i, j] for j in inst.J) <= inst.p[i] * a[i]) for i in inst.I
     )
-    mdl.add_constraints_((mdl.sum(y[i, j] for j in F) == inst.c_dem[i]) for i in C)
-
     mdl.add_constraints_(
-        (y[i, j] <= min(inst.c_dem[i], inst.f_cap[j]) * x[j]) for i, j in product(C, F)
+        (mdl.sum(x[i, j] for i in inst.I) == inst.r[j]) for j in inst.J
+    )
+    mdl.add_constraints_(
+        (x[i, j] <= min(inst.p[i], inst.r[j]) * a[i]) for i, j in inst.IJ
     )
 
     # objetivo
-    total_c_cst = mdl.sum(inst.c_cst[j, i] * y[i, j] for i in C for j in F)
-    total_f_cst = mdl.sum(inst.f_cst[j] * x[j] for j in F)
+    cost_fixed = mdl.sum(inst.f[i] * a[i] for i in inst.I)
+    cost_transport = mdl.sum(inst.c[i, j] * x[i, j] for i, j in inst.IJ)
 
-    mdl.minimize(total_c_cst + total_f_cst)
-
-    # configurações
-    mdl.parameters.threads = 1
+    mdl.minimize(cost_fixed + cost_transport)
 
     sol = mdl.solve()
 
     return sol.objective_value
 
 
-def solve_instance_relaxcut(
-    inst,
+# ============================================================================
+# Relax-and-Cut (Non-Delayed, slide-faithful ε-schedule)
+# ============================================================================
+def solve_instance_rc(
+    inst: "CFLInstance",
     *,
-    max_iter: int = 300,
+    max_iter: int = 10000,
     threads: int = 1,
-    gamma: float = 1.0,  # Polyak factor
-    mu0: float = 10.0,  # fallback step before UB exists
-    tol_stop: float = 1e-6,
+    # Polyak (used when UB is finite)
+    gamma: float = 1.0,
+    # Fallback ε-schedule (used only while UB is not known)
+    eps0: float = 1.0,
+    stall_halve: int = 200,
+    eps_min: float = 1e-12,
+    # CA/PA/CI & cuts
+    viol_tol: float = 1e-8,
+    dual_keep: int = 10,
     ndrc_keep: int = 5,
-    seed: int = 0,
+    # stopping / logs
+    tol_stop: float = 1e-6,
     log: bool = False,
 ) -> float:
     """
-    Relax-and-Cut for CFL (amounts model). Returns only the best UB (objective value).
-    If no feasible UB is obtained, returns float('inf').
+    Non-Delayed Relax-and-Cut (NDRC) close to the slides:
+      - Dualize demand equalities with free multipliers u[j]
+      - Explicit CA/PA/CI; set g_j=0 for j in CI (non-delayed)
+      - EXTRA aging on PA\CA (drop multipliers after 'dual_keep')
+      - Step: Polyak with UB if available; else ε-schedule fallback
+      - VUB cuts separated on demand (aged non-delayed)
+      - Repair only to produce UB (not in step length when ε-fallback is active)
+    Returns: best feasible UB (float) or +inf if none found.
     """
-    rng = np.random.default_rng(seed)
+    import numpy as np
+    from docplex.mp.model import Model
 
-    m, n = inst.m, inst.n
-    d = inst.f_cap  # (m,)
-    f = inst.f_cst  # (m,)
-    a = inst.c_dem  # (n,)
-    c = inst.c_cst  # (m,n) per-unit
+    TOL = 1e-12
 
-    # multipliers for demand equalities (free)
-    u = np.zeros(n, dtype=float)
+    # ---------- dual state ----------
+    u = np.zeros(inst.nJ, dtype=float)
+    dual_age = np.zeros(inst.nJ, dtype=int)
 
-    # active VUB cuts: for each j, store customers i with y[i,j] <= a[i] x[j]
-    active_vub = [dict() for _ in range(m)]
+    # ---------- cut state (VUB) ----------
+    active_vub: list[dict[int, int]] = [dict() for _ in range(inst.nI)]
 
+    # ---------- bounds ----------
     best_lb = -np.inf
     best_ub = np.inf
-    best_x_open = np.zeros(m, dtype=int)
+    best_a_open = np.zeros(inst.nI, dtype=int)
 
-    def lagrangian_subproblem(u_vec: np.ndarray):
-        r = c - u_vec[None, :]  # reduced costs (m,n)
-        lb = float(np.dot(u_vec, a))  # constant term
-        x_open = np.zeros(m, dtype=int)
-        y = np.zeros((n, m), dtype=float)
+    # ε-schedule bookkeeping (used only while UB is inf)
+    eps = float(eps0)
+    since_improve = 0
 
-        for j in range(m):
-            order = np.argsort(r[j, :])
-            if r[j, order[0]] >= 0.0:
+    # ---------------- helpers ----------------
+    def lrp_solve(u_vec: np.ndarray):
+        """
+        Greedy LRP at u: reduced costs c̃[i,j] = c[i,j] - u[j].
+        """
+        ctilde = inst.c - u_vec[None, :]
+        lb_k = float(np.dot(u_vec, inst.r))
+        a_rel = np.zeros(inst.nI, dtype=int)
+        x_rel = np.zeros((inst.nI, inst.nJ), dtype=float)
+
+        for i in inst.I:
+            neg = np.where(ctilde[i, :] < -TOL)[0]
+            if neg.size == 0:
                 continue
-            cap_left = d[j]
-            accum = 0.0
-            for i in order:
-                if cap_left <= 1e-12:
+
+            order = neg[np.argsort(ctilde[i, neg])]
+            cap_left = float(inst.p[i])
+            var_part = 0.0
+
+            for j in order:
+                if cap_left <= TOL:
                     break
-                rc = r[j, i]
+                rc = ctilde[i, j]
                 if rc >= 0.0:
                     break
-                y_cap = a[i] if (i in active_vub[j]) else np.inf
-                take = min(cap_left, y_cap)
-                if take > 0.0:
-                    y[i, j] = take
+                # VUB only when activated (non-delayed strengthening)
+                per_pair_cap = inst.r[j] if (j in active_vub[i]) else np.inf
+                take = min(cap_left, per_pair_cap)
+                if take > TOL:
+                    x_rel[i, j] = take
                     cap_left -= take
-                    accum += rc * take
-            if f[j] + accum < 0.0:
-                x_open[j] = 1
-                lb += f[j] + accum
-        return lb, x_open, y
+                    var_part += rc * take
 
-    def separate_vub_violations(x_open, y) -> int:
+            if inst.f[i] + var_part < 0.0:
+                a_rel[i] = 1
+                lb_k += inst.f[i] + var_part
+            else:
+                if np.any(x_rel[i, :] > 0):
+                    x_rel[i, :] = 0.0
+
+        g = inst.r - np.sum(x_rel, axis=0)
+        return lb_k, a_rel, x_rel, g
+
+    def separate_vub(a_rel: np.ndarray, x_rel: np.ndarray) -> int:
         newcuts = 0
-        for j in range(m):
-            if x_open[j] == 0:
+        for i in inst.I:
+            if a_rel[i] == 0:
                 continue
-            over = np.where(y[:, j] > a + 1e-9)[0]
-            for i in over:
-                if i not in active_vub[j]:
-                    active_vub[j][i] = 0
+            viol = np.where(x_rel[i, :] > inst.r + 1e-9)[0]
+            for j in viol:
+                if j not in active_vub[i]:
+                    active_vub[i][j] = 0
                     newcuts += 1
         return newcuts
 
-    def age_and_prune_cuts():
-        for j in range(m):
-            dead = []
-            for i, age in active_vub[j].items():
+    def age_and_prune_vub():
+        for i in inst.I:
+            if not active_vub[i]:
+                continue
+            drop = []
+            for j, age in active_vub[i].items():
                 age += 1
                 if age > ndrc_keep:
-                    dead.append(i)
+                    drop.append(j)
                 else:
-                    active_vub[j][i] = age
-            for i in dead:
-                del active_vub[j][i]
+                    active_vub[i][j] = age
+            for j in drop:
+                del active_vub[i][j]
 
-    def transportation_repair(x_open):
-        if float(np.dot(d, x_open)) + 1e-9 < float(np.sum(a)):
-            return None
+    def repair_ub(a_open: np.ndarray) -> Optional[float]:
+        """
+        Feasibility-completion + transportation LP on open set → UB.
+        """
+        total_r = float(np.sum(inst.r))
+        a_fix = a_open.astype(int).copy()
+        cap = float(np.dot(inst.p, a_fix))
+
+        if cap + 1e-9 < total_r:
+            closed = [i for i in inst.I if a_fix[i] == 0 and inst.p[i] > 0]
+            closed.sort(key=lambda i: inst.f[i] / max(inst.p[i], 1e-12))
+            for i in closed:
+                a_fix[i] = 1
+                cap += float(inst.p[i])
+                if cap + 1e-9 >= total_r:
+                    break
+            if cap + 1e-9 < total_r:
+                a_fix[:] = 1  # last resort
+
         mdl = Model(name="CFL_repair", log_output=False)
         mdl.parameters.threads = threads
-        I = range(n)
-        J = [j for j in range(m) if x_open[j] == 1]
-        yvar = {(i, j): mdl.continuous_var(lb=0.0) for j in J for i in I}
-        mdl.add_constraints_(mdl.sum(yvar[i, j] for j in J) == a[i] for i in I)
-        mdl.add_constraints_(mdl.sum(yvar[i, j] for i in I) <= d[j] for j in J)
+
+        I_open = [i for i in inst.I if a_fix[i] == 1]
+        if not I_open:
+            return None
+
+        xvar = {
+            (i, j): mdl.continuous_var(lb=0.0, name=f"x_{i}_{j}")
+            for i in I_open
+            for j in inst.J
+        }
+
+        mdl.add_constraints_(
+            mdl.sum(xvar[i, j] for i in I_open) == inst.r[j] for j in inst.J
+        )
+        mdl.add_constraints_(
+            mdl.sum(xvar[i, j] for j in inst.J) <= inst.p[i] for i in I_open
+        )
+
         mdl.minimize(
-            mdl.sum(c[j, i] * yvar[i, j] for j in J for i in I)
-            + mdl.sum(f[j] for j in J)
+            mdl.sum(inst.c[i, j] * xvar[i, j] for i in I_open for j in inst.J)
+            + mdl.sum(inst.f[i] for i in I_open)
         )
         sol = mdl.solve()
         if not sol:
             return None
         return float(sol.objective_value)
 
+    # ---------------- main loop ----------------
     for k in range(1, max_iter + 1):
-        lb, x_open, y_lag = lagrangian_subproblem(u)
-        if lb > best_lb:
-            best_lb = lb
-        newcuts = separate_vub_violations(x_open, y_lag)
-        g = a - np.sum(y_lag, axis=1)  # subgradient
-        ng2 = float(np.dot(g, g))
+        lb_k, a_rel_k, x_rel_k, g_k = lrp_solve(u)
 
-        # try to build UB occasionally / when improving
-        if (k == 1) or (k % 5 == 0):
-            rep = transportation_repair(x_open)
-            if rep is not None and rep + 1e-8 < best_ub:
-                best_ub = rep
-                best_x_open = x_open.copy()
+        # Best LB / stall logic
+        improved = lb_k > best_lb + 1e-12
+        if improved:
+            best_lb = lb_k
+            since_improve = 0
+            ub_try = repair_ub(a_rel_k)
+            if ub_try is not None and ub_try + 1e-8 < best_ub:
+                best_ub = ub_try
+                best_a_open = a_rel_k.copy()
+        else:
+            since_improve += 1
 
-        # Polyak step (if UB known), else fallback
-        if ng2 > 0:
+        # VUB separation + aging
+        if separate_vub(a_rel_k, x_rel_k) == 0:
+            age_and_prune_vub()
+
+        # CA/PA/CI on dualized demands
+        ca = np.where(np.abs(g_k) > viol_tol)[0]
+        pa = np.where(u != 0.0)[0]
+        ci = np.setdiff1d(np.arange(inst.nJ), np.union1d(ca, pa), assume_unique=False)
+
+        g_nd = g_k.copy()
+        if ci.size:
+            g_nd[ci] = 0.0
+
+        dual_age[ca] = 0
+        pa_not_ca = np.setdiff1d(pa, ca, assume_unique=False)
+        if pa_not_ca.size:
+            dual_age[pa_not_ca] += 1
+            kill = pa_not_ca[dual_age[pa_not_ca] > dual_keep]
+            if kill.size:
+                u[kill] = 0.0
+                dual_age[kill] = 0
+
+        # Step: Polyak if UB is finite, else ε-schedule fallback
+        denom = float(np.dot(g_nd, g_nd))
+        if denom > 0.0:
             if np.isfinite(best_ub):
-                step = gamma * max(best_ub - lb, 0.0) / ng2
-                if step < 1e-12:
-                    step = 1e-12
+                step = gamma * max(best_ub - lb_k, 0.0) / denom
             else:
-                step = mu0 / np.sqrt(k)
-            u = u + step * g
+                step = eps / denom
+            u = u + step * g_nd
 
-        if newcuts == 0:
-            age_and_prune_cuts()
+        # ε-schedule decay only active while using ε (i.e., UB is inf)
+        if not np.isfinite(best_ub) and since_improve >= stall_halve and eps > eps_min:
+            eps = max(eps * 0.5, eps_min)
+            since_improve = 0
 
-        if np.isfinite(best_ub) and (
-            best_ub - best_lb <= tol_stop * max(1.0, abs(best_ub))
-        ):
-            break
+        # Stop if we have a UB and gap is small
+        if np.isfinite(best_ub):
+            gap = best_ub - best_lb
+            if gap <= tol_stop * max(1.0, abs(best_ub)):
+                if log:
+                    print(
+                        f"[NDRC] it={k} LBk={lb_k:.6f} LB={best_lb:.6f} "
+                        f"UB={best_ub:.6f} ||g_nd||={np.linalg.norm(g_nd):.3e} "
+                        f"|CA|={ca.size} |PA|={pa.size} |CI|={ci.size}"
+                    )
+                break
 
+        if log and (k % 50 == 0 or k == 1):
+            print(
+                f"[NDRC] it={k:4d} LBk={lb_k:.6f} LB={best_lb:.6f} "
+                f"UB={(best_ub if np.isfinite(best_ub) else float('inf')):.6f} "
+                f"||g_nd||={np.linalg.norm(g_nd):.3e} |CA|={ca.size} |PA|={pa.size} |CI|={ci.size}"
+            )
+
+    # last-chance UB
     if not np.isfinite(best_ub):
-        # last-chance repair with the last x_open (or zeros if never improved)
-        rep = transportation_repair(best_x_open if best_x_open.sum() else x_open)
-        if rep is not None:
-            best_ub = rep
+        fallback = best_a_open if best_a_open.sum() else a_rel_k
+        ub_try = repair_ub(fallback)
+        if ub_try is not None:
+            best_ub = ub_try
 
-    return float(best_ub) if np.isfinite(best_ub) else float("inf")
+    return float(best_ub) if np.isfinite(best_ub) else np.inf
 
 
 def main():
     """
     Rotina principal
     """
-    PATH = "instances/cfl/cfl_41.txt"
+    PATH = "instances/cfl/cfl_a2.txt"
 
-    instance = CFLInstance.from_orlib(PATH)
-    print(f"m={instance.m}, n={instance.n}")
+    instance = CFLInstance.from_txt(PATH)
 
-    obj_true = solve_instance(instance)
+    obj = solve_instance_rc(instance, log=True)
 
-    obj_rac = solve_instance_relaxcut(instance)
-
-    print(f"true objective: {obj_true}")
-    print(f"relax and cut: {obj_rac}")
-
-    print(f"{100*abs(obj_true - obj_rac) / obj_true}%")
+    print(f"objective: {obj}")
 
     return
 

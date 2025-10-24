@@ -23,6 +23,7 @@ class TSCFLInstance:
     nI: int  # |I| plantas
     nJ: int  # |J| depósitos
     nK: int  # |K| clientes
+
     f: np.ndarray  # f_i = custo fixo da planta i
     g: np.ndarray  # g_j = custo fixo do depósito j
     c: np.ndarray  # c_ij = custo unitário planta i -> depósito j
@@ -123,9 +124,6 @@ def solve_instance(inst: TSCFLInstance, log_output: bool = True):
     )
 
     mdl.minimize(cost_fixed + cost_stage1 + cost_stage2)
-
-    # configurações do solver
-    # mdl.parameters.threads = 1
 
     sol = mdl.solve()
 
