@@ -50,13 +50,15 @@ class CFLInstance:
         nI, nJ = arr[:2].astype(int)
         data = arr[2:]
 
-        facility_data = data[: 2 * nI].reshape(nI, 2)
-        p = facility_data[:, 0]
-        f = facility_data[:, 1]
+        s1 = 2 * nI
 
-        customer_data = data[2 * nI :].reshape(nJ, 1 + nI)
-        r = customer_data[:, 0]
-        c = customer_data[:, 1:].T / r[None, :]
+        pf = data[:s1].reshape(nI, 2)
+        p = pf[:, 0]
+        f = pf[:, 1]
+
+        rc = data[s1:].reshape(nJ, 1 + nI)
+        r = rc[:, 0]
+        c = rc[:, 1:].T / r[None, :]
 
         return cls(nI=nI, nJ=nJ, f=f, p=p, r=r, c=c)
 
