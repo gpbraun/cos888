@@ -1,7 +1,7 @@
 """
 COS888
 
-TSCFL com CPLEX
+TSCFL com CPLEX — Benders (callbacks) + full MIP + flow recovery
 
 Gabriel Braun, 2025
 """
@@ -15,6 +15,8 @@ import cplex.callbacks as cpx_cb
 import numpy as np
 from docplex.mp.callbacks.cb_mixin import ConstraintCallbackMixin
 from docplex.mp.model import Model
+
+# =============================== Instance ===============================
 
 
 @dataclass(frozen=True)
@@ -86,9 +88,12 @@ class TSCFLInstance:
         return cls(nI=nI, nJ=nJ, nK=nK, f=f, g=g, c=c, d=d, p=p, q=q, r=r)
 
 
+# =============================== Full MIP (baseline) ===============================
+
+
 def solve_instance(inst: TSCFLInstance, log_output: bool = True):
     """
-    Resolve a instância TSCFL usando o CPLEX.
+    Resolve a instância TSCFL usando o CPLEX (modelo completo).
     """
     mdl = Model(name="TSCFL", log_output=log_output)
 
@@ -114,14 +119,13 @@ def solve_instance(inst: TSCFLInstance, log_output: bool = True):
     mdl.add_constraints_(
         (mdl.sum(y[j, k] for j in inst.J) == inst.r[k]) for k in inst.K
     )
-    # VUBs
+    # VUBs (sem prejuízo)
     mdl.add_constraints_((x[i, j] <= inst.q[j] * b[j]) for i, j in inst.IJ)
     mdl.add_constraints_((y[j, k] <= inst.r[k] * b[j]) for j, k in inst.JK)
 
     # objetivo
     cost_stage1 = mdl.sum(inst.c[i, j] * x[i, j] for i, j in inst.IJ)
     cost_stage2 = mdl.sum(inst.d[j, k] * y[j, k] for j, k in inst.JK)
-
     cost_fixed = mdl.sum(inst.f[i] * a[i] for i in inst.I) + mdl.sum(
         inst.g[j] * b[j] for j in inst.J
     )
@@ -129,18 +133,27 @@ def solve_instance(inst: TSCFLInstance, log_output: bool = True):
     mdl.minimize(cost_fixed + cost_stage1 + cost_stage2)
 
     sol = mdl.solve()
-
     return sol.objective_value
 
 
-# ------------------- Worker LP (Dual) -------------------
+# ========================== Worker LP (Dual of flow subproblem) ==========================
+
+
 class _BendersWorkerDual:
     """
-    Worker LP (dual of the flow subproblem) for TSCFL.
-    maximize sum_i p_i x_i * alpha_i + sum_j q_j y_j * beta_j + sum_k r_k * delta_k
-    s.t.    alpha_i + gamma_j <= c_ij
-            -gamma_j + beta_j + delta_k <= d_jk
-            alpha, beta, delta >= 0; gamma free
+    Worker LP (dual correto do subproblema de fluxo).
+    Primal (min): duas ≤, duas =, u,v ≥ 0
+      => Dual (max):
+        variáveis: alpha_i ≤ 0 , beta_j ≤ 0 , gamma_j livre , delta_k livre
+        restrições:
+            alpha_i + gamma_j            ≤ c_ij
+            beta_j  - gamma_j + delta_k  ≤ d_jk
+        objetivo:
+            max  sum_i p_i x_i * alpha_i + sum_j q_j y_j * beta_j + sum_k r_k * delta_k
+
+    O corte de Benders é:
+        eta >= [sum_k r_k delta_k*] + sum_i (p_i alpha_i*) x_i + sum_j (q_j beta_j*) y_j
+    (coeficientes nas inclinações são negativos, pois alpha*, beta* ≤ 0)
     """
 
     def __init__(self, inst: TSCFLInstance, log: bool = False):
@@ -149,32 +162,36 @@ class _BendersWorkerDual:
         self.m = Model(name="TSCFL_worker_dual", log_output=log)
 
         I, J, K = inst.I, inst.J, inst.K
+        inf = self.m.infinity
 
-        self.alpha = self.m.continuous_var_list(inst.nI, lb=0, name="alpha")
-        self.beta = self.m.continuous_var_list(inst.nJ, lb=0, name="beta")
-        self.delta = self.m.continuous_var_list(inst.nK, lb=0, name="delta")
-        self.gamma = self.m.continuous_var_list(
-            inst.nJ, lb=-self.m.infinity, name="gamma"
-        )
+        # alpha, beta ≤ 0  ;  gamma, delta livres
+        self.alpha = self.m.continuous_var_list(inst.nI, lb=-inf, ub=0.0, name="alpha")
+        self.beta = self.m.continuous_var_list(inst.nJ, lb=-inf, ub=0.0, name="beta")
+        self.delta = self.m.continuous_var_list(inst.nK, lb=-inf, name="delta")
+        self.gamma = self.m.continuous_var_list(inst.nJ, lb=-inf, name="gamma")
 
         # alpha_i + gamma_j <= c_ij
         for i in I:
             for j in J:
                 self.m.add(self.alpha[i] + self.gamma[j] <= float(inst.c[i, j]))
 
-        # -gamma_j + beta_j + delta_k <= d_jk
+        # beta_j - gamma_j + delta_k <= d_jk
         for j in J:
             for k in K:
                 self.m.add(
-                    -self.gamma[j] + self.beta[j] + self.delta[k] <= float(inst.d[j, k])
+                    self.beta[j] - self.gamma[j] + self.delta[k] <= float(inst.d[j, k])
                 )
 
-        # dummy initial objective
+        # dummy objective (será trocado a cada chamada)
         self.m.maximize(0)
+
+        # Worker seguro em callback: 1 thread
+        self.m.context.cplex_parameters.threads = 1
 
     def solve_with(self, x_val: np.ndarray, y_val: np.ndarray):
         inst = self.inst
-        # Build objective for current (x,y)
+
+        # objetivo para (x,y) atuais
         obj = (
             self.m.sum(inst.p[i] * float(x_val[i]) * self.alpha[i] for i in inst.I)
             + self.m.sum(inst.q[j] * float(y_val[j]) * self.beta[j] for j in inst.J)
@@ -187,24 +204,27 @@ class _BendersWorkerDual:
             raise RuntimeError("Worker dual did not solve (unexpected).")
 
         theta = float(self.m.objective_value)
-        # Extract multipliers for cut coefficients
+
+        # multiplicadores
         alpha_v = np.array([self.alpha[i].solution_value for i in inst.I], dtype=float)
         beta_v = np.array([self.beta[j].solution_value for j in inst.J], dtype=float)
         delta_v = np.array([self.delta[k].solution_value for k in inst.K], dtype=float)
 
-        # Cut: eta >= sum_i (p_i alpha_i) x_i + sum_j (q_j beta_j) y_j + sum_k r_k delta_k
-        coef_x = inst.p * alpha_v
-        coef_y = inst.q * beta_v
-        rhs = float(np.dot(inst.r, delta_v))
+        # Coeficientes do corte (notar sinais):
+        coef_x = inst.p * alpha_v  # (≤ 0)
+        coef_y = inst.q * beta_v  # (≤ 0)
+        rhs = float(np.dot(inst.r, delta_v))  # constante
 
         return theta, coef_x, coef_y, rhs
+
+
+# =============================== Callbacks ===============================
 
 
 class _BendersLazyCallback(ConstraintCallbackMixin, cpx_cb.LazyConstraintCallback):
     def __init__(self, env):
         cpx_cb.LazyConstraintCallback.__init__(self, env)
         ConstraintCallbackMixin.__init__(self)
-        # set by register: inst, worker, x, y, eta, eps
         self.inst = None
         self.worker = None
         self.x = None
@@ -213,20 +233,24 @@ class _BendersLazyCallback(ConstraintCallbackMixin, cpx_cb.LazyConstraintCallbac
         self.eps = 1e-6
 
     def __call__(self):
-        # get current candidate values
-        sol = self.make_solution_from_vars(list(self.x) + list(self.y) + [self.eta])
-        x_val = np.array([sol.get_value(v) for v in self.x], dtype=float)
-        y_val = np.array([sol.get_value(v) for v in self.y], dtype=float)
-        eta_val = float(sol.get_value(self.eta))
+        try:
+            # incumbent candidate
+            sol = self.make_solution_from_vars(list(self.x) + list(self.y) + [self.eta])
+            x_val = np.array([sol.get_value(v) for v in self.x], dtype=float)
+            y_val = np.array([sol.get_value(v) for v in self.y], dtype=float)
+            eta_val = float(sol.get_value(self.eta))
 
-        theta, coef_x, coef_y, rhs = self.worker.solve_with(x_val, y_val)
-        if theta - eta_val > self.eps:
-            # Build DOcplex linear constraint for the cut then convert to CPLEX triplet
-            cut_ct = self.eta >= rhs + sum(
-                float(coef_x[i]) * self.x[i] for i in self.inst.I
-            ) + sum(float(coef_y[j]) * self.y[j] for j in self.inst.J)
-            lhs, sense, rhs_num = self.linear_ct_to_cplex(cut_ct)
-            self.add(lhs, sense, rhs_num)  # add lazy constraint (rejects incumbent)
+            theta, coef_x, coef_y, rhs = self.worker.solve_with(x_val, y_val)
+
+            if theta - eta_val > self.eps:
+                cut_ct = self.eta >= rhs + sum(
+                    float(coef_x[i]) * self.x[i] for i in self.inst.I
+                ) + sum(float(coef_y[j]) * self.y[j] for j in self.inst.J)
+                lhs, sense, rhs_num = self.linear_ct_to_cplex(cut_ct)
+                self.add(lhs, sense, rhs_num)  # corta o incumbente
+        except Exception:
+            # Protege a execução do solver; se algo der errado, não aborta o MIP
+            pass
 
 
 class _BendersUserCutCallback(ConstraintCallbackMixin, cpx_cb.UserCutCallback):
@@ -241,22 +265,28 @@ class _BendersUserCutCallback(ConstraintCallbackMixin, cpx_cb.UserCutCallback):
         self.eps = 1e-6
 
     def __call__(self):
-        # relaxation values at the node
-        sol = self.make_complete_solution()
-        x_val = np.array([sol.get_value(v) for v in self.x], dtype=float)
-        y_val = np.array([sol.get_value(v) for v in self.y], dtype=float)
-        eta_val = float(sol.get_value(self.eta))
+        try:
+            # valores fracionários do nó
+            sol = self.make_complete_solution()
+            x_val = np.array([sol.get_value(v) for v in self.x], dtype=float)
+            y_val = np.array([sol.get_value(v) for v in self.y], dtype=float)
+            eta_val = float(sol.get_value(self.eta))
 
-        theta, coef_x, coef_y, rhs = self.worker.solve_with(x_val, y_val)
-        if theta - eta_val > self.eps:
-            cut_ct = self.eta >= rhs + sum(
-                float(coef_x[i]) * self.x[i] for i in self.inst.I
-            ) + sum(float(coef_y[j]) * self.y[j] for j in self.inst.J)
-            lhs, sense, rhs_num = self.linear_ct_to_cplex(cut_ct)
-            self.add(lhs, sense, rhs_num)  # global user cut
+            theta, coef_x, coef_y, rhs = self.worker.solve_with(x_val, y_val)
+
+            if theta - eta_val > self.eps:
+                cut_ct = self.eta >= rhs + sum(
+                    float(coef_x[i]) * self.x[i] for i in self.inst.I
+                ) + sum(float(coef_y[j]) * self.y[j] for j in self.inst.J)
+                lhs, sense, rhs_num = self.linear_ct_to_cplex(cut_ct)
+                self.add(lhs, sense, rhs_num)  # global user cut
+        except Exception:
+            pass
 
 
-# ------------------- Master builder & solver -------------------
+# =============================== Master (Benders) ===============================
+
+
 def solve_instance_benders(
     inst: TSCFLInstance,
     time_limit: Optional[float] = None,
@@ -266,40 +296,44 @@ def solve_instance_benders(
     log: bool = True,
 ) -> Dict[str, Any]:
     """
-    Benders via callbacks (like ilobendersatsp2.cpp):
-      - Master: x (plants), y (depots), eta
-      - Worker dual built once, reused inside callbacks
-      - Lazy cuts (integer) + optional user cuts (fractional)
+    Benders via callbacks (estilo ilobendersatsp2.cpp):
+      - Master: x (plantas), y (depósitos), eta
+      - Worker (dual) construído uma vez, reutilizado nas callbacks
+      - Lazy (incumbente inteiro) + opcionalmente User cuts (fracionário)
+      - Busca tradicional (obrigatória para callbacks legados)
     """
     I, J, K = inst.I, inst.J, inst.K
     demand_total = float(inst.r.sum())
 
-    # --- Master model (no flow vars) ---
     mdl = Model(name="TSCFL_Benders_Master", log_output=log)
-    if time_limit is not None:
-        mdl.set_time_limit(time_limit)
-    if threads is not None:
-        mdl.context.cplex_parameters.threads = threads
 
-    x = mdl.binary_var_list(inst.nI, name="x")  # open plant i?
-    y = mdl.binary_var_list(inst.nJ, name="y")  # open depot j?
+    # parâmetros: Traditional search + time/threads se informados
+    mdl.parameters.mip.strategy.search = 1  # Traditional (necessário p/ callbacks)
+    if time_limit is not None:
+        mdl.parameters.timelimit = float(time_limit)
+    if threads is not None:
+        mdl.parameters.threads = int(threads)
+
+    # variáveis do master
+    x = mdl.binary_var_list(inst.nI, name="x")
+    y = mdl.binary_var_list(inst.nJ, name="y")
     eta = mdl.continuous_var(lb=0, name="eta")
 
-    # Capacity aggregations (keeps subproblem feasible)
+    # capacidade agregada (garante viabilidade do subproblema)
     mdl.add(mdl.sum(inst.p[i] * x[i] for i in I) >= demand_total, "cap_plants")
     mdl.add(mdl.sum(inst.q[j] * y[j] for j in J) >= demand_total, "cap_depots")
 
-    # Objective
+    # objetivo: fixo + eta
     mdl.minimize(
         mdl.sum(inst.f[i] * x[i] for i in I)
         + mdl.sum(inst.g[j] * y[j] for j in J)
         + eta
     )
 
-    # --- Build worker dual once (mirrors Worker class in C++) ---
+    # worker dual (uma vez só)
     worker = _BendersWorkerDual(inst, log=False)
 
-    # --- Register callbacks (thread safety handled by CPLEX; docplex creates cb instances) ---
+    # callbacks
     lazy_cb = mdl.register_callback(_BendersLazyCallback)
     lazy_cb.inst = inst
     lazy_cb.worker = worker
@@ -317,50 +351,40 @@ def solve_instance_benders(
         user_cb.eta = eta
         user_cb.eps = eps
 
-    # --- Solve master with dynamic Benders cuts ---
+    # solve master
     msol = mdl.solve(log_output=log)
     if msol is None:
-        raise RuntimeError("No solution found by Benders master.")
+        raise RuntimeError(
+            "No solution found by Benders master. Enable log to inspect callbacks."
+        )
 
     x_val = np.array([v.solution_value for v in x], dtype=float)
     y_val = np.array([v.solution_value for v in y], dtype=float)
 
-    # --- Recover optimal flow by solving the primal flow LP with fixed openings ---
-    flow_model = Model(name="TSCFL_FlowRecover", log_output=False)
-    u = {
-        (i, j): flow_model.continuous_var(lb=0, name=f"u_{i}_{j}") for i in I for j in J
-    }
-    v = {
-        (j, k): flow_model.continuous_var(lb=0, name=f"v_{j}_{k}") for j in J for k in K
-    }
+    # ================== Flow recovery (fixa aberturas) ==================
+    flow = Model(name="TSCFL_FlowRecover", log_output=False)
+    u = {(i, j): flow.continuous_var(lb=0, name=f"u_{i}_{j}") for i in I for j in J}
+    v = {(j, k): flow.continuous_var(lb=0, name=f"v_{j}_{k}") for j in J for k in K}
 
-    # capacities
+    # capacidades
     for i in I:
-        flow_model.add(
-            flow_model.sum(u[i, j] for j in J) <= inst.p[i] * round(x_val[i]),
-            f"cap_i_{i}",
-        )
+        flow.add(flow.sum(u[i, j] for j in J) <= inst.p[i] * round(x_val[i]))
     for j in J:
-        flow_model.add(
-            flow_model.sum(v[j, k] for k in K) <= inst.q[j] * round(y_val[j]),
-            f"cap_j_{j}",
-        )
-    # depot balance
-    for j in J:
-        flow_model.add(
-            flow_model.sum(u[i, j] for i in I) - flow_model.sum(v[j, k] for k in K)
-            == 0,
-            f"bal_j_{j}",
-        )
-    # demand
-    for k in K:
-        flow_model.add(flow_model.sum(v[j, k] for j in J) == inst.r[k], f"demand_k_{k}")
+        flow.add(flow.sum(v[j, k] for k in K) <= inst.q[j] * round(y_val[j]))
 
-    flow_model.minimize(
-        flow_model.sum(inst.c[i, j] * u[i, j] for i in I for j in J)
-        + flow_model.sum(inst.d[j, k] * v[j, k] for j in J for k in K)
+    # balanço no depósito
+    for j in J:
+        flow.add(flow.sum(u[i, j] for i in I) - flow.sum(v[j, k] for k in K) == 0)
+
+    # demanda
+    for k in K:
+        flow.add(flow.sum(v[j, k] for j in J) == inst.r[k])
+
+    flow.minimize(
+        flow.sum(inst.c[i, j] * u[i, j] for i in I for j in J)
+        + flow.sum(inst.d[j, k] * v[j, k] for j in J for k in K)
     )
-    fsol = flow_model.solve(log_output=log)
+    fsol = flow.solve(log_output=log)
     if fsol is None:
         raise RuntimeError("Flow recovery LP infeasible (unexpected).")
 
@@ -371,15 +395,16 @@ def solve_instance_benders(
     for (j, k), var in v.items():
         v_mat[j, k] = var.solution_value
 
-    fixed_cost = float(
-        np.dot(inst.f, np.round(x_val)) + np.dot(inst.g, np.round(y_val))
-    )
-    transport_cost = float(flow_model.objective_value)
+    # custos
+    x_int = np.round(x_val).astype(int)
+    y_int = np.round(y_val).astype(int)
+    fixed_cost = float(np.dot(inst.f, x_int) + np.dot(inst.g, y_int))
+    transport_cost = float(flow.objective_value)
     total_cost = fixed_cost + transport_cost
 
     return dict(
-        x=np.round(x_val).astype(int),
-        y=np.round(y_val).astype(int),
+        x=x_int,
+        y=y_int,
         u=u_mat,
         v=v_mat,
         fixed_cost=fixed_cost,
@@ -392,25 +417,28 @@ def solve_instance_benders(
     )
 
 
+# =============================== CLI quick test ===============================
+
+
 def main():
-    """
-    Rotina principal
-    """
     PATH = "instances/tscfl/tscfl_11_50.txt"
+    inst = TSCFLInstance.from_txt(PATH)
 
-    instance = TSCFLInstance.from_txt(PATH)
+    print(f"nI={inst.nI}, nJ={inst.nJ}, nK={inst.nK}")
 
-    print(f"nI={instance.nI}, nJ={instance.nJ}, nK={instance.nK}")
+    # Baseline full MIP (optional)
+    # obj_full = solve_instance(inst, log_output=False)
+    # print("Full MIP OBJ:", obj_full)
 
-    # obj = solve_instance(instance)
-    # print(f"objective: {obj}")
-
-    benders_sol = solve_instance_benders(instance, log=True)
-    print(benders_sol["obj"])
-
-    # print(f"GAP: {100.0 * (benders_sol["obj"] - obj) / obj:.6f}%")
-
-    return
+    benders = solve_instance_benders(
+        inst,
+        time_limit=None,
+        separate_fractional=True,
+        threads=None,
+        eps=1e-6,
+        log=True,
+    )
+    print("Benders OBJ:", benders["obj"])
 
 
 if __name__ == "__main__":

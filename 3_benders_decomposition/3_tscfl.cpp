@@ -1,6 +1,7 @@
-// tscfl_benders.cpp
+// 3_tscfl.cpp
 // COS888 – Benders decomposition for the Two-Stage Capacitated Facility Location (TSCFL)
-// Master MIP + Worker LP (dual) + lazy/user cut callbacks (structure like ilobendersatsp2.cpp)
+// Master MIP + Worker LP (dual) + lazy/user cut callbacks (ilobendersatsp2.cpp style)
+// This version fixes dual signs AND uses hierarchical parameter API.
 
 #include <ilcplex/ilocplex.h>
 #include <algorithm>
@@ -19,7 +20,7 @@ ILOSTLBEGIN
 static inline int idx2(int i, int j, int ncols) { return i * ncols + j; }
 
 // ============================================================
-// Instance: same layout as your Python TSCFLInstance.from_txt
+// Instance: same layout as Python TSCFLInstance.from_txt
 // File layout (space separated):
 // nI nJ nK
 // r[k] (k=0..nK-1)
@@ -112,12 +113,14 @@ struct TSCFLInstance
 };
 
 // ============================================================
-// Worker Dual (built once, only objective is reset per (x,y))
-// Dual of the flow subproblem:
-//   max sum_i p_i x_i * alpha_i + sum_j q_j y_j * beta_j + sum_k r_k * delta_k
-//        s.t. alpha_i + gamma_j <= c_ij
-//             -gamma_j + beta_j + delta_k <= d_jk
-//             alpha,beta,delta >= 0 ; gamma free
+// Worker Dual (built once, objective reset per (x,y))
+// Correct dual (primal min with ≤,≤,=,=):
+//   Dual vars: alpha_i ≤ 0, beta_j ≤ 0, gamma_j free, delta_k free
+//   Dual cons: alpha_i + gamma_j ≤ c_ij
+//              beta_j  - gamma_j + delta_k ≤ d_jk
+//   Dual obj : max  sum_i p_i x_i alpha_i + sum_j q_j y_j beta_j + sum_k r_k delta_k
+// Benders cut: eta ≥ [sum_k r_k delta_k] + Σ_i (p_i alpha_i) x_i + Σ_j (q_j beta_j) y_j
+// (Note alpha_i, beta_j are non-positive at optimum; slopes are negative numbers.)
 // ============================================================
 struct WorkerDual
 {
@@ -125,36 +128,34 @@ struct WorkerDual
     IloEnv env;
     IloModel model;
     IloCplex cplex;
-    IloNumVarArray alpha; // nI, lb 0
-    IloNumVarArray beta;  // nJ, lb 0
-    IloNumVarArray delta; // nK, lb 0
+    IloNumVarArray alpha; // nI, (-inf, 0]
+    IloNumVarArray beta;  // nJ, (-inf, 0]
+    IloNumVarArray delta; // nK, free
     IloNumVarArray gamma; // nJ, free
     IloObjective obj;
 
     WorkerDual(const TSCFLInstance &I, bool log = false)
         : inst(I), env(), model(env), cplex(env),
-          alpha(env, I.nI, 0.0, IloInfinity, ILOFLOAT),
-          beta(env, I.nJ, 0.0, IloInfinity, ILOFLOAT),
-          delta(env, I.nK, 0.0, IloInfinity, ILOFLOAT),
+          alpha(env, I.nI, -IloInfinity, 0.0, ILOFLOAT),
+          beta(env, I.nJ, -IloInfinity, 0.0, ILOFLOAT),
+          delta(env, I.nK, -IloInfinity, IloInfinity, ILOFLOAT),
           gamma(env, I.nJ, -IloInfinity, IloInfinity, ILOFLOAT),
           obj(IloMaximize(env, 0.0))
     {
-
-        // alpha_i + gamma_j <= c_ij
+        // alpha_i + gamma_j ≤ c_ij
         for (int i = 0; i < inst.nI; ++i)
             for (int j = 0; j < inst.nJ; ++j)
                 model.add(alpha[i] + gamma[j] <= inst.C(i, j));
-
-        // -gamma_j + beta_j + delta_k <= d_jk
+        // beta_j - gamma_j + delta_k ≤ d_jk
         for (int j = 0; j < inst.nJ; ++j)
             for (int k = 0; k < inst.nK; ++k)
-                model.add(-gamma[j] + beta[j] + delta[k] <= inst.D(j, k));
+                model.add(beta[j] - gamma[j] + delta[k] <= inst.D(j, k));
 
         model.add(obj);
         cplex.extract(model);
         cplex.setOut(env.getNullStream());
         cplex.setWarning(env.getNullStream());
-        cplex.setParam(IloCplex::Threads, 1); // keep worker single-threaded inside callbacks
+        cplex.setParam(IloCplex::Param::Threads, 1); // safe during callbacks
         if (log)
             cplex.setOut(std::cout);
     }
@@ -163,19 +164,15 @@ struct WorkerDual
     {
         IloExpr e(env);
         for (int i = 0; i < inst.nI; ++i)
-            e += inst.p[i] * x[i] * alpha[i];
+            e += (inst.p[i] * x[i]) * alpha[i]; // alpha ≤ 0
         for (int j = 0; j < inst.nJ; ++j)
-            e += inst.q[j] * y[j] * beta[j];
+            e += (inst.q[j] * y[j]) * beta[j]; // beta  ≤ 0
         for (int k = 0; k < inst.nK; ++k)
-            e += inst.r[k] * delta[k];
+            e += (inst.r[k]) * delta[k]; // delta free
         obj.setExpr(e);
         e.end();
     }
 
-    // Solve and get θ and cut coefficients:
-    //  coef_x[i] = p_i * alpha_i*
-    //  coef_y[j] = q_j * beta_j*
-    //  rhs      = sum_k r_k * delta_k*
     void solve(const std::vector<double> &x, const std::vector<double> &y,
                double &theta,
                std::vector<double> &coef_x,
@@ -185,30 +182,32 @@ struct WorkerDual
         setObjective(x, y);
         if (!cplex.solve())
             throw std::runtime_error("Worker dual failed to solve.");
+
         theta = cplex.getObjValue();
 
         coef_x.assign(inst.nI, 0.0);
-        coef_y.assign(inst.nJ, 0.0);
-        rhs = 0.0;
-
         for (int i = 0; i < inst.nI; ++i)
-            coef_x[i] = inst.p[i] * cplex.getValue(alpha[i]);
+            coef_x[i] = inst.p[i] * cplex.getValue(alpha[i]); // ≤ 0
+
+        coef_y.assign(inst.nJ, 0.0);
         for (int j = 0; j < inst.nJ; ++j)
-            coef_y[j] = inst.q[j] * cplex.getValue(beta[j]);
+            coef_y[j] = inst.q[j] * cplex.getValue(beta[j]); // ≤ 0
+
+        rhs = 0.0;
         for (int k = 0; k < inst.nK; ++k)
             rhs += inst.r[k] * cplex.getValue(delta[k]);
     }
 };
 
 // ============================================================
-// Lazy (integer incumbent) callback: add Benders optimality cuts
+// Lazy (integer) callback: add violated Benders optimality cuts
 // ============================================================
 class LazyBendersCallbackI : public IloCplex::LazyConstraintCallbackI
 {
     const TSCFLInstance &inst;
     WorkerDual &worker;
-    IloBoolVarArray x; // plants
-    IloBoolVarArray y; // depots
+    IloBoolVarArray x;
+    IloBoolVarArray y;
     IloNumVar eta;
     double eps;
 
@@ -229,7 +228,6 @@ public:
 
     void main() override
     {
-        // Read incumbent candidate values
         std::vector<double> xv(inst.nI), yv(inst.nJ);
         for (int i = 0; i < inst.nI; ++i)
             xv[i] = getValue(x[i]);
@@ -250,7 +248,7 @@ public:
                 lin += coef_x[i] * x[i];
             for (int j = 0; j < inst.nJ; ++j)
                 lin += coef_y[j] * y[j];
-            add(eta >= lin); // reject incumbent
+            add(eta >= lin); // cut off incumbent
             lin.end();
         }
     }
@@ -285,7 +283,6 @@ public:
 
     void main() override
     {
-        // Relaxation values at current node
         std::vector<double> xv(inst.nI), yv(inst.nJ);
         for (int i = 0; i < inst.nI; ++i)
             xv[i] = getValue(x[i]);
@@ -313,7 +310,7 @@ public:
 };
 
 // ============================================================
-// Flow recovery (optional): primal LP to get u_ij and v_jk
+// Flow recovery: primal LP to get u_ij and v_jk (optional)
 // ============================================================
 struct FlowSolution
 {
@@ -340,7 +337,7 @@ FlowSolution recoverFlows(const TSCFLInstance &inst,
             cplex.setWarning(env.getNullStream());
         }
         if (timelimit > 0)
-            cplex.setParam(IloCplex::TiLim, timelimit);
+            cplex.setParam(IloCplex::Param::TimeLimit, timelimit);
 
         IloNumVarArray u(env, inst.nI * inst.nJ, 0.0, IloInfinity, ILOFLOAT);
         IloNumVarArray v(env, inst.nJ * inst.nK, 0.0, IloInfinity, ILOFLOAT);
@@ -422,19 +419,17 @@ FlowSolution recoverFlows(const TSCFLInstance &inst,
 // ============================================================
 int main(int argc, char **argv)
 {
-    if (argc < 2)
-    {
-        std::cerr << "Usage: " << argv[0] << " INSTANCE.txt [TIME_LIMIT_SECONDS]\n";
-        return 1;
-    }
-    std::string path = argv[1];
-    double TL = -1.0;
-    if (argc >= 3)
-        TL = std::atof(argv[2]);
+    // Default instance if none is provided
+    const char *DEFAULT_INST = "../instances/tscfl/tscfl_11_50.txt";
+    std::string path = (argc >= 2) ? argv[1] : DEFAULT_INST;
+
+    // Keep optional time limit logic disabled (no CLI arg); leave wiring in case you enable later
+    double TL = -1.0; // no time limit
     const double EPS = 1e-6;
 
     try
     {
+        std::cout << "Using instance: " << path << "\n";
         TSCFLInstance inst = TSCFLInstance::fromTxt(path);
 
         IloEnv env;
@@ -475,11 +470,11 @@ int main(int argc, char **argv)
             obj.end();
         }
 
-        // parameters
+        // parameters (hierarchical API)
         if (TL > 0)
-            cplex.setParam(IloCplex::TiLim, TL);
-        cplex.setParam(IloCplex::Threads, 0); // let CPLEX pick
-        // Required so user/lazy cuts are honored
+            cplex.setParam(IloCplex::Param::TimeLimit, TL);
+        cplex.setParam(IloCplex::Param::Threads, 0); // let CPLEX choose
+        // Required so legacy (lazy/user) callbacks are honored
         cplex.setParam(IloCplex::Param::MIP::Strategy::Search, IloCplex::Traditional);
 
         // worker dual
@@ -504,7 +499,7 @@ int main(int argc, char **argv)
         for (int j = 0; j < inst.nJ; ++j)
             ysol[j] = (cplex.getValue(y[j]) > 0.5) ? 1 : 0;
 
-        // optional: recover flows and detailed costs
+        // recover flows and detailed costs
         FlowSolution flows = recoverFlows(inst, xsol, ysol, /*timelimit=*/-1.0, /*log=*/false);
 
         double fixed = 0.0;
@@ -517,7 +512,8 @@ int main(int argc, char **argv)
         // report
         std::cout.setf(std::ios::fixed);
         std::cout.precision(6);
-        std::cout << "Status: " << (cplex.getStatus() == IloCplex::Optimal ? "Optimal" : "Feasible") << "\n";
+        IloAlgorithm::Status st = cplex.getStatus();
+        std::cout << "Status: " << (st == IloAlgorithm::Optimal ? "Optimal" : "Feasible") << "\n";
         std::cout << "MIP gap: " << cplex.getMIPRelativeGap() << "\n";
         std::cout << "Nodes  : " << cplex.getNnodes() << "\n";
         std::cout << "Time(s): " << cplex.getTime() << "\n";
@@ -525,14 +521,6 @@ int main(int argc, char **argv)
         std::cout << "Fixed  : " << fixed << "\n";
         std::cout << "Flow   : " << flows.cost << "\n";
         std::cout << "OBJ    : " << total << "\n";
-
-        // Uncomment if you want to print x,y vectors
-        /*
-        std::cout << "x: ";
-        for (int i = 0; i < inst.nI; ++i) std::cout << xsol[i] << (i + 1 == inst.nI ? '\n' : ' ');
-        std::cout << "y: ";
-        for (int j = 0; j < inst.nJ; ++j) std::cout << ysol[j] << (j + 1 == inst.nJ ? '\n' : ' ');
-        */
 
         env.end();
         return 0;
