@@ -11,7 +11,7 @@ from itertools import product
 from pathlib import Path
 
 import numpy as np
-from docplex.mp.model import Model
+from docplex.cp.model import CpoModel
 
 
 @dataclass(frozen=True)
@@ -64,52 +64,58 @@ class SSCFLInstance:
         return cls(nI=nI, nJ=nJ, f=f, c=c, p=p, r=r)
 
 
-def solve_instance(inst: SSCFLInstance):
+def solve_instance_cp_naive(
+    inst,
+    log_output: bool = True,
+    time_limit: float | None = None,
+    workers: int | None = None,
+):
     """
-    Resolve a instância SSCFL (single-source) usando CPLEX.
+    Resolve a instância SSCFL (single-source) usando CP Optimizer (ingênuo).
     """
-    mdl = Model(name="SSCFL", log_output=True)
+    mdl = CpoModel(name="SSCFL_CP_Naive")
 
-    # variáveis:
-    #   a_i  = decisão: abre instalação i
-    #   x_ij = decisão: instalação i -> cliente j
+    # VARIÁVEIS
+    #   a_i  = decisão: abre planta i
+    #   x_ij = decisão: planta i -> cliente j
     a = mdl.binary_var_dict(inst.I, name="a")
     x = mdl.binary_var_dict(inst.IJ, name="x")
 
+    # RESTRIÇÕES
     # cada cliente é atendido por exatamente uma instalação
-    mdl.add_constraints_(mdl.sum(x[i, j] for i in inst.I) == 1 for j in inst.J)
+    mdl.add(mdl.sum(x[i, j] for i in inst.I) == 1 for j in inst.J)
 
     # capacidade das instalações
-    mdl.add_constraints_(
+    mdl.add(
         mdl.sum(inst.r[j] * x[i, j] for j in inst.J) <= inst.p[i] * a[i] for i in inst.I
     )
 
     # vinculação: se instalação está fechada, ninguém pode ser atendido por ela
-    mdl.add_constraints_((x[i, j] <= a[i]) for i, j in inst.IJ)
+    mdl.add(x[i, j] <= a[i] for i, j in inst.IJ)
 
     # objetivo: custo fixo + custo de atribuição
     cost_fixed = mdl.sum(inst.f[i] * a[i] for i in inst.I)
-    cost_stage = mdl.sum(inst.c[i, j] * x[i, j] for i, j in inst.IJ)
+    cost_stage = mdl.sum(inst.c[i, j] * inst.r[j] * x[i, j] for (i, j) in inst.IJ)
 
     mdl.minimize(cost_fixed + cost_stage)
 
     # solve
-    sol = mdl.solve()
-
-    if sol:
-        print(f"LB: {sol.objective_value}, UB: {sol.solve_details.best_bound}")
-        print(sol.solve_details)
+    mdl.solve(
+        LogVerbosity=("Terse" if log_output else "Quiet"),
+        TimeLimit=time_limit,
+        Workers=workers,
+    )
 
 
 def main():
     """
     Rotina principal
     """
-    PATH = "instances/sscfl/yang/sscfl_y_a1.txt"
+    PATH = "instances/sscfl/holmberg/sscfl_h_05.txt"
 
     instance = SSCFLInstance.from_txt(PATH)
 
-    solve_instance(instance)
+    solve_instance_cp_naive(instance, time_limit=100)
 
     return
 

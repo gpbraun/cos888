@@ -24,13 +24,13 @@ class TSCFLInstance:
     nJ: int  # |J| depósitos
     nK: int  # |K| clientes
 
-    f: np.ndarray  # f_i = custo fixo da planta i
-    g: np.ndarray  # g_j = custo fixo do depósito j
+    f: np.ndarray  # f_i  = custo fixo da planta i
+    g: np.ndarray  # g_j  = custo fixo do depósito j
     c: np.ndarray  # c_ij = custo unitário planta i -> depósito j
     d: np.ndarray  # d_jk = custo unitário depósito j -> cliente k
-    p: np.ndarray  # p_i = capacidade da planta i
-    q: np.ndarray  # q_j = capacidade do depósito j
-    r: np.ndarray  # r_k = demanda do cliente k
+    p: np.ndarray  # p_i  = capacidade da planta i
+    q: np.ndarray  # q_j  = capacidade do depósito j
+    r: np.ndarray  # r_k  = demanda do cliente k
 
     @property
     def I(self) -> list[int]:
@@ -89,7 +89,11 @@ def solve_instance(inst: TSCFLInstance):
     """
     mdl = Model(name="TSCFL", log_output=True)
 
-    # variáveis
+    # variáveis:
+    #   a_i  = decisão: abre a planta i
+    #   b_j  = decisão: abre o satélite j
+    #   x_ij = fluxo: planta i -> satélite j
+    #   y_jk = fluxo: satélite i -> cliente k
     a = mdl.binary_var_dict(inst.I, name="a")
     b = mdl.binary_var_dict(inst.J, name="b")
     x = mdl.continuous_var_dict(inst.IJ, lb=0.0, name="x")
@@ -111,25 +115,21 @@ def solve_instance(inst: TSCFLInstance):
     mdl.add_constraints_(
         (mdl.sum(y[j, k] for j in inst.J) == inst.r[k]) for k in inst.K
     )
+
     # VUBs
     mdl.add_constraints_((x[i, j] <= inst.q[j] * b[j]) for i, j in inst.IJ)
     mdl.add_constraints_((y[j, k] <= inst.r[k] * b[j]) for j, k in inst.JK)
 
     # objetivo
+    cost_fixed1 = mdl.sum(inst.f[i] * a[i] for i in inst.I)
+    cost_fixed2 = mdl.sum(inst.g[j] * b[j] for j in inst.J)
+
     cost_stage1 = mdl.sum(inst.c[i, j] * x[i, j] for i, j in inst.IJ)
     cost_stage2 = mdl.sum(inst.d[j, k] * y[j, k] for j, k in inst.JK)
 
-    cost_fixed = mdl.sum(inst.f[i] * a[i] for i in inst.I) + mdl.sum(
-        inst.g[j] * b[j] for j in inst.J
-    )
+    mdl.minimize(cost_fixed1 + cost_fixed2 + cost_stage1 + cost_stage2)
 
-    mdl.minimize(cost_fixed + cost_stage1 + cost_stage2)
-
-    sol = mdl.solve()
-
-    if sol:
-        print(f"LB: {sol.objective_value}, UB: {sol.solve_details.best_bound}")
-        print(sol.solve_details)
+    mdl.solve()
 
 
 def main():
@@ -140,9 +140,7 @@ def main():
 
     instance = TSCFLInstance.from_txt(PATH)
 
-    obj = solve_instance(instance)
-
-    print(f"objective: {obj}")
+    solve_instance(instance)
 
     return
 

@@ -23,10 +23,10 @@ class CFLInstance:
     nI: int  # |I| plantas
     nJ: int  # |J| clientes
 
-    f: np.ndarray  # f_i = custo fixo da planta i
+    f: np.ndarray  # f_i  = custo fixo da planta i
     c: np.ndarray  # c_ij = custo unitário planta i -> cliente j
-    p: np.ndarray  # p_i = capacidade da planta i
-    r: np.ndarray  # r_j = demanda do cliente j
+    p: np.ndarray  # p_i  = capacidade da planta i
+    r: np.ndarray  # r_j  = demanda do cliente j
 
     @property
     def I(self) -> list[int]:
@@ -69,7 +69,9 @@ def solve_instance(inst: CFLInstance):
     """
     mdl = Model(name="CFL", log_output=True)
 
-    # variáveis
+    # variáveis:
+    #   a_i  = decisão: abre planta i
+    #   x_ij = decisão: planta i -> cliente j
     a = mdl.binary_var_dict(inst.I, name="a")
     x = mdl.continuous_var_dict(inst.IJ, lb=0.0, name="x")
 
@@ -86,15 +88,11 @@ def solve_instance(inst: CFLInstance):
 
     # objetivo
     cost_fixed = mdl.sum(inst.f[i] * a[i] for i in inst.I)
-    cost_transport = mdl.sum(inst.c[i, j] * x[i, j] for i, j in inst.IJ)
+    cost_stage = mdl.sum(inst.c[i, j] * x[i, j] for i, j in inst.IJ)
 
-    mdl.minimize(cost_fixed + cost_transport)
+    mdl.minimize(cost_fixed + cost_stage)
 
-    sol = mdl.solve()
-
-    if sol:
-        print(f"LB: {sol.objective_value}, UB: {sol.solve_details.best_bound}")
-        print(sol.solve_details)
+    mdl.solve()
 
 
 def main():
