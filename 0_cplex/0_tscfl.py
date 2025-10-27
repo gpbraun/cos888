@@ -83,13 +83,13 @@ class TSCFLInstance:
         return cls(nI=nI, nJ=nJ, nK=nK, f=f, g=g, c=c, d=d, p=p, q=q, r=r)
 
 
-def solve_instance(inst: TSCFLInstance):
+def solve_instance(inst: TSCFLInstance) -> None:
     """
     Resolve a instância TSCFL (two-stage) usando o CPLEX.
     """
     mdl = Model(name="TSCFL", log_output=True)
 
-    # variáveis:
+    # VARIÁVEIS
     #   a_i  = decisão: abre a planta i
     #   b_j  = decisão: abre o satélite j
     #   x_ij = fluxo: planta i -> satélite j
@@ -99,6 +99,7 @@ def solve_instance(inst: TSCFLInstance):
     x = mdl.continuous_var_dict(inst.IJ, lb=0.0, name="x")
     y = mdl.continuous_var_dict(inst.JK, lb=0.0, name="y")
 
+    # RESTRIÇÕES
     # capacidades
     mdl.add_constraints_(
         (mdl.sum(x[i, j] for j in inst.J) <= inst.p[i] * a[i]) for i in inst.I
@@ -120,7 +121,7 @@ def solve_instance(inst: TSCFLInstance):
     mdl.add_constraints_((x[i, j] <= inst.q[j] * b[j]) for i, j in inst.IJ)
     mdl.add_constraints_((y[j, k] <= inst.r[k] * b[j]) for j, k in inst.JK)
 
-    # objetivo
+    # OBJETIVO
     cost_fixed1 = mdl.sum(inst.f[i] * a[i] for i in inst.I)
     cost_fixed2 = mdl.sum(inst.g[j] * b[j] for j in inst.J)
 

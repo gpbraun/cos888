@@ -64,38 +64,6 @@ class CFLInstance:
         return cls(nI=nI, nJ=nJ, f=f, p=p, r=r, c=c)
 
 
-def solve_instance(inst: CFLInstance, log_output: bool = True):
-    """
-    Resolve a instância usando o CPLEX.
-    """
-    mdl = Model(name="CFL", log_output=log_output)
-
-    # variáveis
-    a = mdl.binary_var_dict(inst.I, name="a")
-    x = mdl.continuous_var_dict(inst.IJ, lb=0.0, name="x")
-
-    # restrições
-    mdl.add_constraints_(
-        (mdl.sum(x[i, j] for j in inst.J) <= inst.p[i] * a[i]) for i in inst.I
-    )
-    mdl.add_constraints_(
-        (mdl.sum(x[i, j] for i in inst.I) == inst.r[j]) for j in inst.J
-    )
-    mdl.add_constraints_(
-        (x[i, j] <= min(inst.p[i], inst.r[j]) * a[i]) for i, j in inst.IJ
-    )
-
-    # objetivo
-    cost_fixed = mdl.sum(inst.f[i] * a[i] for i in inst.I)
-    cost_transport = mdl.sum(inst.c[i, j] * x[i, j] for i, j in inst.IJ)
-
-    mdl.minimize(cost_fixed + cost_transport)
-
-    sol = mdl.solve()
-
-    return sol.objective_value
-
-
 def solve_instance_rc(
     inst: "CFLInstance",
     *,
@@ -114,7 +82,7 @@ def solve_instance_rc(
     # stopping / logs
     tol_stop: float = 1e-6,
     log: bool = False,
-) -> float:
+) -> None:
     """
     Non-Delayed Relax-and-Cut (NDRC)
     """

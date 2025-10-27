@@ -63,19 +63,19 @@ class CFLInstance:
         return cls(nI=nI, nJ=nJ, f=f, p=p, r=r, c=c)
 
 
-def solve_instance(inst: CFLInstance):
+def solve_instance(inst: CFLInstance) -> None:
     """
     Resolve a instância usando o CPLEX.
     """
     mdl = Model(name="CFL", log_output=True)
 
-    # variáveis:
+    # VARIÁVEIS
     #   a_i  = decisão: abre planta i
     #   x_ij = decisão: planta i -> cliente j
     a = mdl.binary_var_dict(inst.I, name="a")
     x = mdl.continuous_var_dict(inst.IJ, lb=0.0, name="x")
 
-    # restrições
+    # RESTRIÇÕES
     mdl.add_constraints_(
         (mdl.sum(x[i, j] for j in inst.J) <= inst.p[i] * a[i]) for i in inst.I
     )
@@ -86,7 +86,7 @@ def solve_instance(inst: CFLInstance):
         (x[i, j] <= min(inst.p[i], inst.r[j]) * a[i]) for i, j in inst.IJ
     )
 
-    # objetivo
+    # OBJETIVO
     cost_fixed = mdl.sum(inst.f[i] * a[i] for i in inst.I)
     cost_stage = mdl.sum(inst.c[i, j] * x[i, j] for i, j in inst.IJ)
 

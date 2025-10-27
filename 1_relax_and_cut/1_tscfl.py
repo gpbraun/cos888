@@ -146,7 +146,7 @@ def solve_instance_rc(
     # stopping / logs
     tol_stop: float = 1e-6,
     log: bool = False,
-) -> float:
+) -> None:
     """
     NDRC
     """
@@ -469,8 +469,6 @@ def solve_instance_rc(
         if z_try is not None:
             z_best = z_try
 
-    return L_best, z_best
-
 
 def main():
     """
@@ -480,17 +478,7 @@ def main():
 
     instance = TSCFLInstance.from_txt(PATH)
 
-    print(f"nI={instance.nI}, nJ={instance.nJ}, nK={instance.nK}")
-
-    # obj = solve_instance(instance)
-    # print(f"objective: {obj}")
-
-    LB, UB = solve_instance_rc(instance, log=True)
-    print(
-        f"objective (relax and cut): LB: {LB:.2f} UB: {UB:.2f} GAP: {100.0 * (UB - LB) / UB:.2f}%"
-    )
-
-    # print(f"GAP: {100.0 * (obj_rac - obj) / obj:.6f}%")
+    solve_instance_rc(instance, log=True)
 
     return
 
