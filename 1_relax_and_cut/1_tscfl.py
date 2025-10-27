@@ -130,46 +130,63 @@ def solve_instance(inst: TSCFLInstance, log_output: bool = True):
     return sol.objective_value
 
 
-def solve_instance_rc(
-    inst: "TSCFLInstance",
-    *,
-    max_iter: int = 1000,
-    threads: int = 20,
-    # Polyak (when UB exists) / epsilon fallback
-    gamma: float = 1.0,
-    eps0: float = 1.0,
-    stall_halve: int = 200,
-    eps_min: float = 1e-12,
-    # CA/PA/CI bookkeeping
-    viol_tol: float = 1e-1,
-    dual_keep: int = 5,
-    # stopping / logs
-    tol_stop: float = 1e-6,
-    log: bool = False,
-) -> None:
+class RelaxAndCutTSCFL:
     """
-    NDRC
+    NDRC — Relax-and-Cut for TSCFL (same logic as the provided function),
+    reimplemented as a class with minimal structural changes.
     """
-    alpha = np.zeros(inst.nJ, dtype=float)  # for depot balances
-    beta = np.zeros(inst.nK, dtype=float)  # for customer demands
-    age_alpha = np.zeros(inst.nJ, dtype=int)
-    age_beta = np.zeros(inst.nK, dtype=int)
 
-    # ---------- bounds ----------
-    L_best = -np.inf
-    z_best = np.inf
-    a_inc = np.zeros(inst.nI, dtype=int)
-    b_inc = np.zeros(inst.nJ, dtype=int)
+    def __init__(
+        self,
+        inst: "TSCFLInstance",
+        *,
+        max_iter: int = 1000,
+        threads: int = 20,
+        # Polyak (when UB exists) / epsilon fallback
+        gamma: float = 1.0,
+        eps0: float = 1.0,
+        stall_halve: int = 200,
+        eps_min: float = 1e-12,
+        # CA/PA/CI bookkeeping
+        viol_tol: float = 1e-1,
+        dual_keep: int = 5,
+        # stopping / logs
+        tol_stop: float = 1e-6,
+        log: bool = False,
+    ) -> None:
+        self.inst = inst
+        self.max_iter = max_iter
+        self.threads = threads
+        self.gamma = gamma
+        self.eps0 = eps0
+        self.stall_halve = stall_halve
+        self.eps_min = eps_min
+        self.viol_tol = viol_tol
+        self.dual_keep = dual_keep
+        self.tol_stop = tol_stop
+        self.log = log
 
-    # epsilon schedule (used only while UB unknown)
-    eps = float(eps0)
-    since_improve = 0
+        # Duals and ages
+        self.alpha = np.zeros(self.inst.nJ, dtype=float)  # for depot balances
+        self.beta = np.zeros(self.inst.nK, dtype=float)  # for customer demands
+        self.age_alpha = np.zeros(self.inst.nJ, dtype=int)
+        self.age_beta = np.zeros(self.inst.nK, dtype=int)
+
+        # Bounds and incumbents
+        self.L_best = -np.inf
+        self.z_best = np.inf
+        self.a_inc = np.zeros(self.inst.nI, dtype=int)
+        self.b_inc = np.zeros(self.inst.nJ, dtype=int)
+
+        # Bookkeeping
+        self.iterations = 0
 
     # ------------------------------------------------------------------
     # Greedy LRP at (alpha, beta) — fully decoupled, no CPLEX here
     # ------------------------------------------------------------------
-    def solve_lrp_greedy(alpha_vec: np.ndarray, beta_vec: np.ndarray):
+    def _solve_lrp_greedy(self, alpha_vec: np.ndarray, beta_vec: np.ndarray):
         TOL = 1e-12
+        inst = self.inst
 
         # Reduced costs
         ctil = inst.c + alpha_vec[None, :]  # (nI, nJ)
@@ -268,7 +285,10 @@ def solve_instance_rc(
     # Repair (CPLEX) to build a feasible primal UB given (a,b)
     # *Creates variables only on the open sets to speed up.*
     # ------------------------------------------------------------------
-    def repair_ub(a_open: np.ndarray, b_open: np.ndarray) -> float | None:
+    def _repair_ub(self, a_open: np.ndarray, b_open: np.ndarray) -> float | None:
+        inst = self.inst
+        threads = self.threads
+
         total_r = float(np.sum(inst.r))
         a_fix = a_open.astype(int).copy()
         b_fix = b_open.astype(int).copy()
@@ -353,121 +373,152 @@ def solve_instance_rc(
         return None if not sol else float(sol.objective_value)
 
     # ==============================
-    # Main NDRC loop
+    # Main NDRC loop — same logic
     # ==============================
-    for it in range(1, max_iter + 1):
-        # (1) solve LRP(α,β) greedily
-        L_k, a_k, b_k, x_k, y_k, gA_k, gB_k = solve_lrp_greedy(alpha, beta)
+    def solve(self) -> None:
+        inst = self.inst
+        alpha = self.alpha
+        beta = self.beta
+        age_alpha = self.age_alpha
+        age_beta = self.age_beta
 
-        # (2) LB/UB maintenance
-        improved = L_k > L_best + 1e-12
-        if improved:
-            L_best = L_k
-            since_improve = 0
-        else:
-            since_improve += 1
+        L_best = self.L_best
+        z_best = self.z_best
+        a_inc = self.a_inc
+        b_inc = self.b_inc
 
-        if (it == 1) or improved or (it % 25 == 0):
-            z_try = repair_ub(a_k, b_k)
-            if (z_try is not None) and (z_try + 1e-8 < z_best):
-                z_best = z_try
-                a_inc = a_k.copy()
-                b_inc = b_k.copy()
+        # epsilon schedule (used only while UB unknown)
+        eps = float(self.eps0)
+        since_improve = 0
 
-        # (3) CA/PA/CI & non-delayed zeroing for both families
-        CA_a = np.where(np.abs(gA_k) > viol_tol)[0]
-        PA_a = np.where(alpha != 0.0)[0]
-        CI_a = np.setdiff1d(
-            np.arange(inst.nJ), np.union1d(CA_a, PA_a), assume_unique=False
-        )
+        for it in range(1, self.max_iter + 1):
+            # (1) solve LRP(α,β) greedily
+            L_k, a_k, b_k, x_k, y_k, gA_k, gB_k = self._solve_lrp_greedy(alpha, beta)
 
-        CA_b = np.where(np.abs(gB_k) > viol_tol)[0]
-        PA_b = np.where(beta != 0.0)[0]
-        CI_b = np.setdiff1d(
-            np.arange(inst.nK), np.union1d(CA_b, PA_b), assume_unique=False
-        )
-
-        gA_nd = gA_k.copy()
-        gB_nd = gB_k.copy()
-        if CI_a.size:
-            gA_nd[CI_a] = 0.0
-        if CI_b.size:
-            gB_nd[CI_b] = 0.0
-
-        age_alpha[CA_a] = 0
-        dropA = np.setdiff1d(PA_a, CA_a, assume_unique=False)
-        if dropA.size:
-            age_alpha[dropA] += 1
-            to_zero = dropA[age_alpha[dropA] > dual_keep]
-            if to_zero.size:
-                alpha[to_zero] = 0.0
-                age_alpha[to_zero] = 0
-
-        age_beta[CA_b] = 0
-        dropB = np.setdiff1d(PA_b, CA_b, assume_unique=False)
-        if dropB.size:
-            age_beta[dropB] += 1
-            to_zero = dropB[age_beta[dropB] > dual_keep]
-            if to_zero.size:
-                beta[to_zero] = 0.0
-                age_beta[to_zero] = 0
-
-        # (4) stepsize and dual update
-        denom = float(np.dot(gA_nd, gA_nd) + np.dot(gB_nd, gB_nd))
-        if denom > 0.0:
-            if np.isfinite(z_best):
-                mu = gamma * max(z_best - L_k, 0.0) / denom
+            # (2) LB/UB maintenance
+            improved = L_k > L_best + 1e-12
+            if improved:
+                L_best = L_k
+                since_improve = 0
             else:
-                mu = eps / denom
-            alpha = alpha + mu * gA_nd
-            beta = beta + mu * gB_nd
+                since_improve += 1
 
-        # (5) epsilon schedule while UB unknown
-        if (
-            (not np.isfinite(z_best))
-            and (since_improve >= stall_halve)
-            and (eps > eps_min)
-        ):
-            eps = max(eps * 0.5, eps_min)
-            since_improve = 0
+            if (it == 1) or improved or (it % 25 == 0):
+                z_try = self._repair_ub(a_k, b_k)
+                if (z_try is not None) and (z_try + 1e-8 < z_best):
+                    z_best = z_try
+                    a_inc = a_k.copy()
+                    b_inc = b_k.copy()
 
-        # (6) stopping by gap when UB exists
-        if np.isfinite(z_best):
-            gap = z_best - L_best
-            if gap <= tol_stop * max(1.0, abs(z_best)):
-                if log:
-                    print(
-                        f"[NDRC] it={it}  LRP(α,β)={L_k:.6f}  LB={L_best:.6f}  UB={z_best:.6f}  "
-                        f"||g_nd||={np.sqrt(denom):.3e}  "
-                        f"|CAα|={CA_a.size} |PAα|={PA_a.size} |CIα|={CI_a.size}  "
-                        f"|CAβ|={CA_b.size} |PAβ|={PA_b.size} |CIβ|={CI_b.size}"
-                    )
-                break
-
-        if log and (it % 5 == 0 or it == 1):
-            print(
-                f"[NDRC] it={it:4d}  LRP(α,β)={L_k:.6f}  LB={L_best:.6f}  "
-                f"UB={(z_best if np.isfinite(z_best) else float('inf')):.6f}  "
-                f"||g_nd||={np.sqrt(denom):.3e}  "
-                f"|CAα|={CA_a.size} |PAα|={PA_a.size} |CIα|={CI_a.size}  "
-                f"|CAβ|={CA_b.size} |PAβ|={PA_b.size} |CIβ|={CI_b.size}"
+            # (3) CA/PA/CI & non-delayed zeroing for both families
+            CA_a = np.where(np.abs(gA_k) > self.viol_tol)[0]
+            PA_a = np.where(alpha != 0.0)[0]
+            CI_a = np.setdiff1d(
+                np.arange(inst.nJ), np.union1d(CA_a, PA_a), assume_unique=False
             )
 
-    # last-chance UB if none found
-    if not np.isfinite(z_best):
-        fallback_a = (
-            a_inc
-            if a_inc.sum()
-            else (a_k if "a_k" in locals() else np.zeros(inst.nI, dtype=int))
-        )
-        fallback_b = (
-            b_inc
-            if b_inc.sum()
-            else (b_k if "b_k" in locals() else np.zeros(inst.nJ, dtype=int))
-        )
-        z_try = repair_ub(fallback_a, fallback_b)
-        if z_try is not None:
-            z_best = z_try
+            CA_b = np.where(np.abs(gB_k) > self.viol_tol)[0]
+            PA_b = np.where(beta != 0.0)[0]
+            CI_b = np.setdiff1d(
+                np.arange(inst.nK), np.union1d(CA_b, PA_b), assume_unique=False
+            )
+
+            gA_nd = gA_k.copy()
+            gB_nd = gB_k.copy()
+            if CI_a.size:
+                gA_nd[CI_a] = 0.0
+            if CI_b.size:
+                gB_nd[CI_b] = 0.0
+
+            age_alpha[CA_a] = 0
+            dropA = np.setdiff1d(PA_a, CA_a, assume_unique=False)
+            if dropA.size:
+                age_alpha[dropA] += 1
+                to_zero = dropA[age_alpha[dropA] > self.dual_keep]
+                if to_zero.size:
+                    alpha[to_zero] = 0.0
+                    age_alpha[to_zero] = 0
+
+            age_beta[CA_b] = 0
+            dropB = np.setdiff1d(PA_b, CA_b, assume_unique=False)
+            if dropB.size:
+                age_beta[dropB] += 1
+                to_zero = dropB[age_beta[dropB] > self.dual_keep]
+                if to_zero.size:
+                    beta[to_zero] = 0.0
+                    age_beta[to_zero] = 0
+
+            # (4) stepsize and dual update
+            denom = float(np.dot(gA_nd, gA_nd) + np.dot(gB_nd, gB_nd))
+            if denom > 0.0:
+                if np.isfinite(z_best):
+                    mu = self.gamma * max(z_best - L_k, 0.0) / denom
+                else:
+                    mu = eps / denom
+                alpha = alpha + mu * gA_nd
+                beta = beta + mu * gB_nd
+
+            # (5) epsilon schedule while UB unknown
+            if (
+                (not np.isfinite(z_best))
+                and (since_improve >= self.stall_halve)
+                and (eps > self.eps_min)
+            ):
+                eps = max(eps * 0.5, self.eps_min)
+                since_improve = 0
+
+            # (6) stopping by gap when UB exists
+            if np.isfinite(z_best):
+                gap = z_best - L_best
+                if gap <= self.tol_stop * max(1.0, abs(z_best)):
+                    if self.log:
+                        print(
+                            f"[NDRC] it={it}  LRP(α,β)={L_k:.6f}  LB={L_best:.6f}  UB={z_best:.6f}  "
+                            f"||g_nd||={np.sqrt(denom):.3e}  "
+                            f"|CAα|={CA_a.size} |PAα|={PA_a.size} |CIα|={CI_a.size}  "
+                            f"|CAβ|={CA_b.size} |PAβ|={PA_b.size} |CIβ|={CI_b.size}"
+                        )
+                    self.iterations = it
+                    break
+
+            if self.log and (it % 5 == 0 or it == 1):
+                print(
+                    f"[NDRC] it={it:4d}  LRP(α,β)={L_k:.6f}  LB={L_best:.6f}  "
+                    f"UB={(z_best if np.isfinite(z_best) else float('inf')):.6f}  "
+                    f"||g_nd||={np.sqrt(denom):.3e}  "
+                    f"|CAα|={CA_a.size} |PAα|={PA_a.size} |CIα|={CI_a.size}  "
+                    f"|CAβ|={CA_b.size} |PAβ|={PA_b.size} |CIβ|={CI_b.size}"
+                )
+
+            self.iterations = it
+
+        # last-chance UB if none found
+        if not np.isfinite(z_best):
+            fallback_a = (
+                a_inc
+                if a_inc.sum()
+                else (a_k if "a_k" in locals() else np.zeros(inst.nI, dtype=int))
+            )
+            fallback_b = (
+                b_inc
+                if b_inc.sum()
+                else (b_k if "b_k" in locals() else np.zeros(inst.nJ, dtype=int))
+            )
+            z_try = self._repair_ub(fallback_a, fallback_b)
+            if z_try is not None:
+                z_best = z_try
+
+        # persist back to the object state
+        self.alpha = alpha
+        self.beta = beta
+        self.age_alpha = age_alpha
+        self.age_beta = age_beta
+        self.L_best = L_best
+        self.z_best = z_best
+        self.a_inc = a_inc
+        self.b_inc = b_inc
+        # same as original: no explicit return
+        return None
 
 
 def main():
@@ -478,7 +529,8 @@ def main():
 
     instance = TSCFLInstance.from_txt(PATH)
 
-    solve_instance_rc(instance, log=True)
+    solver = RelaxAndCutTSCFL(instance, max_iter=1000, log=True)
+    solver.solve()
 
     return
 
