@@ -92,6 +92,7 @@ def solve_instance(inst: CFLInstance) -> None:
 
     mdl.minimize(cost_fixed + cost_flow)
 
+    # SOLVE
     solution = mdl.solve()
 
     if solution:

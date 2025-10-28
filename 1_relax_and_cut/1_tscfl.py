@@ -209,7 +209,7 @@ class RelaxAndCutTSCFL:
             else:
                 return j, 0, 0.0, None, None
 
-        # paraleliza a resolução das plantas e depósitos
+        # Resolução das plantas e depósitos em paralelo
         with ThreadPoolExecutor() as ex:
             for i, open_i, contrib, js, take in ex.map(_solve_plant, self.inst.I):
                 if open_i:
@@ -282,7 +282,7 @@ class RelaxAndCutTSCFL:
         if not I_open or not J_open:
             return None
 
-        # Modelo CPLEX
+        # Modelo CPLEX (contínuo)
         mdl = Model(name="TSCFL_heuristic", log_output=False)
 
         xR = mdl.continuous_var_dict(
@@ -383,6 +383,7 @@ class RelaxAndCutTSCFL:
             if np.isfinite(self.z_best):
                 self.gap = (self.z_best - self.L_best) / max(1.0, abs(self.z_best))
                 if self.gap <= self.tol_stop:
+                    print("Solução ótima encontrada!")
                     break
 
             # log do loop

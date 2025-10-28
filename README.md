@@ -4,27 +4,24 @@ Otimização Combinatória II
 
 ## Installation
 
-First, create the conda env.
+Primeiro, crie o ambiente conda:
 
 ```shell
 conda env create --file environment.yaml
 conda activate cos888-env
 ```
 
-Then, 
+Em seguida:
 
 ```shell
 docplex config --upgrade /opt/ibm/ILOG/CPLEX_Studio2212
 ```
 
-## The problem
+## O projeto
 
-Capacitated facility location: https://people.brunel.ac.uk/~mastjjb/jeb/orlib/capinfo.html
+Resolução de problemas de localização de facilidade capacitada utilizando os métodos:
 
-## 1. Relax and Cut
-
-## 2. Constraint Programming
-
-## 3. Benders Decomposition
-
-## 4. Column Generation
+1. Relax-and-Cut
+2. Programação por Restrições
+3. Decomposição de Benders
+4. Geração de Colunas

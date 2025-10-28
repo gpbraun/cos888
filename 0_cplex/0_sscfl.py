@@ -23,10 +23,10 @@ class SSCFLInstance:
     nI: int  # |I| plantas
     nJ: int  # |J| clientes
 
-    f: np.ndarray  # f_i = custo fixo da planta i
+    f: np.ndarray  # f_i  = custo fixo da planta i
     c: np.ndarray  # c_ij = custo unitário planta i -> cliente j
-    p: np.ndarray  # p_i = capacidade da planta i
-    r: np.ndarray  # r_j = demanda do cliente j
+    p: np.ndarray  # p_i  = capacidade da planta i
+    r: np.ndarray  # r_j  = demanda do cliente j
 
     @property
     def I(self) -> list[int]:
@@ -94,7 +94,7 @@ def solve_instance(inst: SSCFLInstance) -> None:
 
     mdl.minimize(cost_fixed + cost_flow)
 
-    # solve
+    # SOLVE
     solution = mdl.solve()
 
     if solution:

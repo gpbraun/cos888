@@ -117,7 +117,7 @@ def solve_instance(inst: TSCFLInstance) -> None:
         (mdl.sum(y[j, k] for j in inst.J) == inst.r[k]) for k in inst.K
     )
 
-    # VUBs
+    # capacidade agregada (viabilidade)
     mdl.add_constraints_((x[i, j] <= inst.q[j] * b[j]) for i, j in inst.IJ)
     mdl.add_constraints_((y[j, k] <= inst.r[k] * b[j]) for j, k in inst.JK)
 
@@ -130,6 +130,7 @@ def solve_instance(inst: TSCFLInstance) -> None:
 
     mdl.minimize(cost_fixed1 + cost_fixed2 + cost_flow1 + cost_flow2)
 
+    # SOLVE
     solution = mdl.solve()
 
     if solution:

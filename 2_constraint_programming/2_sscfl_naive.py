@@ -93,13 +93,13 @@ def solve_instance_cp_naive(
     # vinculação: se instalação está fechada, ninguém pode ser atendido por ela
     mdl.add(x[i, j] <= a[i] for i, j in inst.IJ)
 
-    # objetivo: custo fixo + custo de atribuição
+    # OBJETIVO
     cost_fixed = mdl.sum(inst.f[i] * a[i] for i in inst.I)
     cost_flow = mdl.sum(inst.c[i, j] * inst.r[j] * x[i, j] for (i, j) in inst.IJ)
 
     mdl.minimize(cost_fixed + cost_flow)
 
-    # solve
+    # SOLVE
     mdl.solve(
         LogVerbosity=("Terse" if log_output else "Quiet"),
         TimeLimit=time_limit,
