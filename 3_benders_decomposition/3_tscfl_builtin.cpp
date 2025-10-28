@@ -280,14 +280,14 @@ public:
 //
 int main()
 {
-    const std::string PATH = "../instances/tscfl/tscfl_11_50.txt";
+    const std::string PATH = "../instances/tscfl/tscfl_13_100.txt";
 
     try
     {
         TSCFLInstance instance = TSCFLInstance::from_txt(PATH);
 
         // inst, time_limit, log
-        BendersBuiltinTSCFL solver(instance, /*time_limit=*/200, /*log_output=*/true);
+        BendersBuiltinTSCFL solver(instance, 200, true);
         solver.solve();
     }
     catch (const std::exception &e)

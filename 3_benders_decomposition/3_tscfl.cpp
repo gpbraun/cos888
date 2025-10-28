@@ -463,7 +463,7 @@ int main()
         TSCFLInstance instance = TSCFLInstance::from_txt(PATH);
 
         // inst, time_limit, log
-        BendersTSCFL solver(instance, 200, true);
+        BendersTSCFL solver(instance, 100, true);
         solver.solve();
     }
     catch (const std::exception &e)
