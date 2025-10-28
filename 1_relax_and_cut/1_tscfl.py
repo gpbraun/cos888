@@ -6,9 +6,11 @@ TSCFL com CPLEX
 Gabriel Braun, 2025
 """
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from itertools import product
 from pathlib import Path
+from time import perf_counter
 
 import numpy as np
 from docplex.mp.model import Model
@@ -24,13 +26,13 @@ class TSCFLInstance:
     nJ: int  # |J| depósitos
     nK: int  # |K| clientes
 
-    f: np.ndarray  # f_i = custo fixo da planta i
-    g: np.ndarray  # g_j = custo fixo do depósito j
+    f: np.ndarray  # f_i  = custo fixo da planta i
+    g: np.ndarray  # g_j  = custo fixo do depósito j
     c: np.ndarray  # c_ij = custo unitário planta i -> depósito j
     d: np.ndarray  # d_jk = custo unitário depósito j -> cliente k
-    p: np.ndarray  # p_i = capacidade da planta i
-    q: np.ndarray  # q_j = capacidade do depósito j
-    r: np.ndarray  # r_k = demanda do cliente k
+    p: np.ndarray  # p_i  = capacidade da planta i
+    q: np.ndarray  # q_j  = capacidade do depósito j
+    r: np.ndarray  # r_k  = demanda do cliente k
 
     @property
     def I(self) -> list[int]:
@@ -83,441 +85,317 @@ class TSCFLInstance:
         return cls(nI=nI, nJ=nJ, nK=nK, f=f, g=g, c=c, d=d, p=p, q=q, r=r)
 
 
-def solve_instance(inst: TSCFLInstance, log_output: bool = True):
-    """
-    Resolve a instância TSCFL usando o CPLEX.
-    """
-    mdl = Model(name="TSCFL", log_output=log_output)
-
-    # variáveis
-    a = mdl.binary_var_dict(inst.I, name="a")
-    b = mdl.binary_var_dict(inst.J, name="b")
-    x = mdl.continuous_var_dict(inst.IJ, lb=0.0, name="x")
-    y = mdl.continuous_var_dict(inst.JK, lb=0.0, name="y")
-
-    # capacidades
-    mdl.add_constraints_(
-        (mdl.sum(x[i, j] for j in inst.J) <= inst.p[i] * a[i]) for i in inst.I
-    )
-    mdl.add_constraints_(
-        (mdl.sum(y[j, k] for k in inst.K) <= inst.q[j] * b[j]) for j in inst.J
-    )
-    # balanço nos depósitos
-    mdl.add_constraints_(
-        (mdl.sum(x[i, j] for i in inst.I) == mdl.sum(y[j, k] for k in inst.K))
-        for j in inst.J
-    )
-    # demanda dos clientes
-    mdl.add_constraints_(
-        (mdl.sum(y[j, k] for j in inst.J) == inst.r[k]) for k in inst.K
-    )
-    # VUBs
-    mdl.add_constraints_((x[i, j] <= inst.q[j] * b[j]) for i, j in inst.IJ)
-    mdl.add_constraints_((y[j, k] <= inst.r[k] * b[j]) for j, k in inst.JK)
-
-    # objetivo
-    cost_stage1 = mdl.sum(inst.c[i, j] * x[i, j] for i, j in inst.IJ)
-    cost_stage2 = mdl.sum(inst.d[j, k] * y[j, k] for j, k in inst.JK)
-
-    cost_fixed = mdl.sum(inst.f[i] * a[i] for i in inst.I) + mdl.sum(
-        inst.g[j] * b[j] for j in inst.J
-    )
-
-    mdl.minimize(cost_fixed + cost_stage1 + cost_stage2)
-
-    sol = mdl.solve()
-
-    return sol.objective_value
-
-
 class RelaxAndCutTSCFL:
     """
-    NDRC — Relax-and-Cut for TSCFL (same logic as the provided function),
-    reimplemented as a class with minimal structural changes.
+    Resolve a instância usando o método: Non-Delayed Relax-and-Cut.
     """
 
     def __init__(
         self,
         inst: "TSCFLInstance",
         *,
-        max_iter: int = 1000,
-        threads: int = 20,
-        # Polyak (when UB exists) / epsilon fallback
         gamma: float = 1.0,
-        eps0: float = 1.0,
-        stall_halve: int = 200,
-        eps_min: float = 1e-12,
-        # CA/PA/CI bookkeeping
-        viol_tol: float = 1e-1,
         dual_keep: int = 5,
-        # stopping / logs
         tol_stop: float = 1e-6,
-        log: bool = False,
+        max_iter: int = 10_000,
+        time_limit: int = 1000,
+        log_output: bool = False,
     ) -> None:
         self.inst = inst
-        self.max_iter = max_iter
-        self.threads = threads
         self.gamma = gamma
-        self.eps0 = eps0
-        self.stall_halve = stall_halve
-        self.eps_min = eps_min
-        self.viol_tol = viol_tol
         self.dual_keep = dual_keep
         self.tol_stop = tol_stop
-        self.log = log
 
-        # Duals and ages
-        self.alpha = np.zeros(self.inst.nJ, dtype=float)  # for depot balances
-        self.beta = np.zeros(self.inst.nK, dtype=float)  # for customer demands
-        self.age_alpha = np.zeros(self.inst.nJ, dtype=int)
-        self.age_beta = np.zeros(self.inst.nK, dtype=int)
+        self.max_iter = max_iter
+        self.time_limit = time_limit
+        self.log_output = log_output
 
-        # Bounds and incumbents
+        self.lamb = np.zeros(self.inst.nJ + self.inst.nK, dtype=float)
+        self.lamb_age = np.zeros(self.inst.nJ + self.inst.nK, dtype=int)
+
         self.L_best = -np.inf
         self.z_best = np.inf
-        self.a_inc = np.zeros(self.inst.nI, dtype=int)
-        self.b_inc = np.zeros(self.inst.nJ, dtype=int)
+        self.gap = np.inf
 
-        # Bookkeeping
-        self.iterations = 0
+        self.a_best = np.zeros(self.inst.nI, dtype=int)
+        self.b_best = np.zeros(self.inst.nJ, dtype=int)
 
-    # ------------------------------------------------------------------
-    # Greedy LRP at (alpha, beta) — fully decoupled, no CPLEX here
-    # ------------------------------------------------------------------
-    def _solve_lrp_greedy(self, alpha_vec: np.ndarray, beta_vec: np.ndarray):
-        TOL = 1e-12
-        inst = self.inst
+        self.iter = 0
+        self.time = 0.0
 
-        # Reduced costs
-        ctil = inst.c + alpha_vec[None, :]  # (nI, nJ)
-        dtil = inst.d - alpha_vec[:, None] + beta_vec[None, :]  # (nJ, nK)
+    def _solve_lrp(self, lamb: np.ndarray):
+        """
+        Resolve a relaxação Lagrangeana para obter um limite inferior.
+        """
+        alph = lamb[: self.inst.nJ]
+        beta = lamb[self.inst.nJ :]
 
-        # Allocations and open decisions
-        a_rel = np.zeros(inst.nI, dtype=np.int8)
-        b_rel = np.zeros(inst.nJ, dtype=np.int8)
-        x_rel = np.zeros((inst.nI, inst.nJ), dtype=float)
-        y_rel = np.zeros((inst.nJ, inst.nK), dtype=float)
+        # custos reduzidos
+        ctil = self.inst.c + alph[None, :]  # (nI, nJ)
+        dtil = self.inst.d - alph[:, None] + beta[None, :]  # (nJ, nK)
 
-        # Constant from dualizing customer demands
-        L_val = -float(np.dot(beta_vec, inst.r))
+        a_rel = np.zeros(self.inst.nI, dtype=np.int8)
+        b_rel = np.zeros(self.inst.nJ, dtype=np.int8)
+        L_val = -np.dot(beta, self.inst.r)
 
-        # Local views (tiny speedup + readability)
-        p, q, r = inst.p, inst.q, inst.r
-        f, g = inst.f, inst.g
+        # agregadores para subgradientes
+        sum_x_j = np.zeros(self.inst.nJ, dtype=float)  # soma_i x[i,j]
+        sum_y_j = np.zeros(self.inst.nJ, dtype=float)  # soma_k y[j,k]
+        sum_y_k = np.zeros(self.inst.nK, dtype=float)  # soma_j y[j,k]
 
-        # -------- Plant-side subproblems (independent over i) --------
-        for i in range(inst.nI):
-            row = ctil[i]  # view
-            neg_js = np.nonzero(row < -TOL)[0]
-            if neg_js.size == 0:
-                continue
+        def _greedy_take(sorted_caps: np.ndarray, cap_total: float) -> np.ndarray:
+            """
+            Dado: vetor de capacidades dos itens (já ordenados) e uma capacidade total.
+            Retorna: `take` com quanto é pego de cada item, na mesma ordem.
+            """
+            if np.isclose(cap_total, 0.0) or sorted_caps.size == 0:
+                return np.zeros_like(sorted_caps, dtype=float)
+            cum = np.cumsum(sorted_caps)
+            full_cnt = np.searchsorted(cum, cap_total, side="right")
+            take = np.zeros_like(sorted_caps, dtype=float)
+            if full_cnt > 0:
+                take[:full_cnt] = sorted_caps[:full_cnt]
+            rem = cap_total - (cum[full_cnt - 1] if full_cnt > 0 else 0.0)
+            if (
+                (full_cnt < sorted_caps.size)
+                and (rem > 0.0)
+                and (not np.isclose(rem, 0.0))
+            ):
+                take[full_cnt] = rem
+            return take
 
-            order = neg_js[np.argsort(row[neg_js])]
-            cap_left = float(p[i])
-            var_part = 0.0
-            x_row = x_rel[i]  # view
+        # resolve uma planta i
+        def _solve_plant(i: int):
+            row = ctil[i]
+            mask = (row < 0.0) & (~np.isclose(row, 0.0))
+            if not np.any(mask):
+                return (i, 0, 0.0, None, None)  # fechado
 
-            for j in order:
-                if np.isclose(cap_left, 0.0, atol=TOL):
-                    break
+            js = np.flatnonzero(mask)
+            # ordenar por custo reduzido crescente
+            order = np.argsort(row[js])
+            js = js[order]
+            rc = row[js]
+            qj = self.inst.q[js]
 
-                # per-arc bound: x[i,j] <= q[j]
-                take = q[j] if cap_left >= q[j] else cap_left
-                if np.isclose(take, 0.0, atol=TOL):
-                    continue
+            take_sorted = _greedy_take(qj, self.inst.p[i])
+            var_part = np.dot(rc, take_sorted)
+            open_i = take_sorted.any() and (self.inst.f[i] + var_part < 0.0)
 
-                rc = row[j]  # negative by construction
-                x_row[j] = take
-                cap_left -= take
-                var_part += rc * take
+            if open_i:
+                return i, 1, (self.inst.f[i] + var_part), js, take_sorted
+            else:
+                return i, 0, 0.0, None, None
 
-            # open i iff variable part + f[i] is negative; otherwise wipe tentative flow
-            if x_row.any() and (f[i] + var_part < 0.0):
-                a_rel[i] = 1
-                L_val += float(f[i] + var_part)
-            elif x_row.any():
-                x_row.fill(0.0)
+        # resolve um depósito j
+        def _solve_depot(j: int):
+            row = dtil[j]
+            mask = (row < 0.0) & (~np.isclose(row, 0.0))
+            if not np.any(mask):
+                return j, 0, 0.0, None, None
 
-        # -------- Depot-side subproblems (independent over j) --------
-        for j in range(inst.nJ):
-            row = dtil[j]  # view
-            neg_ks = np.nonzero(row < -TOL)[0]
-            if neg_ks.size == 0:
-                continue
+            ks = np.flatnonzero(mask)
+            order = np.argsort(row[ks])
+            ks = ks[order]
+            rc = row[ks]
+            rk = self.inst.r[ks]
 
-            order = neg_ks[np.argsort(row[neg_ks])]
-            cap_left = float(q[j])
-            var_part = 0.0
-            y_row = y_rel[j]  # view
+            take_sorted = _greedy_take(rk, self.inst.q[j])
+            var_part = np.dot(rc, take_sorted)
+            open_j = take_sorted.any() and (self.inst.g[j] + var_part < 0.0)
 
-            for k in order:
-                if np.isclose(cap_left, 0.0, atol=TOL):
-                    break
+            if open_j:
+                return j, 1, (self.inst.g[j] + var_part), ks, take_sorted
+            else:
+                return j, 0, 0.0, None, None
 
-                # per-arc bound: y[j,k] <= r[k]
-                take = r[k] if cap_left >= r[k] else cap_left
-                if np.isclose(take, 0.0, atol=TOL):
-                    continue
+        # paraleliza a resolução das plantas e depósitos
+        with ThreadPoolExecutor() as ex:
+            for i, open_i, contrib, js, take in ex.map(_solve_plant, self.inst.I):
+                if open_i:
+                    a_rel[i] = 1
+                    L_val += contrib
+                    # soma_i x[i,j] (apenas nas colunas usadas)
+                    sum_x_j[js] += take
 
-                rc = row[k]  # negative by construction
-                y_row[k] = take
-                cap_left -= take
-                var_part += rc * take
+        with ThreadPoolExecutor() as ex:
+            for j, open_j, contrib, ks, take in ex.map(_solve_depot, self.inst.J):
+                if open_j:
+                    b_rel[j] = 1
+                    L_val += contrib
+                    # soma_k y[j,k] e soma_j y[j,k]
+                    tj = np.sum(take)
+                    if not np.isclose(tj, 0.0):
+                        sum_y_j[j] = tj
+                        sum_y_k[ks] += take
 
-            # open j iff variable part + g[j] is negative; otherwise wipe tentative flow
-            if y_row.any() and (g[j] + var_part < 0.0):
-                b_rel[j] = 1
-                L_val += float(g[j] + var_part)
-            elif y_row.any():
-                y_row.fill(0.0)
+        # Cálculo dos subgradientes
+        subgrad = np.empty_like(lamb)
+        subgrad[: self.inst.nJ] = sum_x_j - sum_y_j
+        subgrad[self.inst.nJ :] = sum_y_k - self.inst.r
 
-        # -------- Subgradients --------
-        sum_x_j = x_rel.sum(axis=0)  # (nJ,)
-        sum_y_j = y_rel.sum(axis=1)  # (nJ,)
-        sum_y_k = y_rel.sum(axis=0)  # (nK,)
+        return L_val, a_rel, b_rel, subgrad
 
-        gA = sum_x_j - sum_y_j
-        gB = sum_y_k - r
+    def _solve_heuristic(self, a_open: np.ndarray, b_open: np.ndarray):
+        """
+        Resolve a heurística lagrangeana para obter um limite superior.
+        """
+        total_r = np.sum(self.inst.r)
 
-        return L_val, a_rel, b_rel, x_rel, y_rel, gA, gB
-
-    # ------------------------------------------------------------------
-    # Repair (CPLEX) to build a feasible primal UB given (a,b)
-    # *Creates variables only on the open sets to speed up.*
-    # ------------------------------------------------------------------
-    def _repair_ub(self, a_open: np.ndarray, b_open: np.ndarray) -> float | None:
-        inst = self.inst
-        threads = self.threads
-
-        total_r = float(np.sum(inst.r))
         a_fix = a_open.astype(int).copy()
         b_fix = b_open.astype(int).copy()
 
-        cap_p = float(np.dot(inst.p, a_fix))
-        cap_q = float(np.dot(inst.q, b_fix))
+        cap_p = np.dot(self.inst.p, a_fix)
+        cap_q = np.dot(self.inst.q, b_fix)
 
-        # ensure enough total capacity (open cheapest per unit capacity)
-        if cap_p + 1e-9 < total_r:
+        # garante a capacidade total (abre o mais barato por unidade)
+        if (cap_p < total_r) and (not np.isclose(cap_p, total_r)):
             closed_plants = [
-                i for i in range(inst.nI) if a_fix[i] == 0 and inst.p[i] > 0
+                i for i in range(self.inst.nI) if a_fix[i] == 0 and self.inst.p[i] > 0
             ]
-            closed_plants.sort(key=lambda i: inst.f[i] / max(inst.p[i], 1e-12))
+            closed_plants.sort(key=lambda i: self.inst.f[i] / self.inst.p[i])
             for i in closed_plants:
                 a_fix[i] = 1
-                cap_p += float(inst.p[i])
-                if cap_p + 1e-9 >= total_r:
+                cap_p += self.inst.p[i]
+                if (cap_p > total_r) or np.isclose(cap_p, total_r):
                     break
 
-        if cap_q + 1e-9 < total_r:
+        if (cap_q < total_r) and (not np.isclose(cap_q, total_r)):
             closed_depots = [
-                j for j in range(inst.nJ) if b_fix[j] == 0 and inst.q[j] > 0
+                j for j in range(self.inst.nJ) if b_fix[j] == 0 and self.inst.q[j] > 0
             ]
-            closed_depots.sort(key=lambda j: inst.g[j] / max(inst.q[j], 1e-12))
+            closed_depots.sort(key=lambda j: self.inst.g[j] / self.inst.q[j])
             for j in closed_depots:
                 b_fix[j] = 1
-                cap_q += float(inst.q[j])
-                if cap_q + 1e-9 >= total_r:
+                cap_q += self.inst.q[j]
+                if (cap_q > total_r) or np.isclose(cap_q, total_r):
                     break
 
-        if cap_p + 1e-9 < total_r or cap_q + 1e-9 < total_r:
+        if (cap_p < total_r and not np.isclose(cap_p, total_r)) or (
+            cap_q < total_r and not np.isclose(cap_q, total_r)
+        ):
             a_fix[:] = 1
             b_fix[:] = 1
 
-        I_open = [i for i in range(inst.nI) if a_fix[i] == 1]
-        J_open = [j for j in range(inst.nJ) if b_fix[j] == 1]
+        I_open = [i for i in range(self.inst.nI) if a_fix[i] == 1]
+        J_open = [j for j in range(self.inst.nJ) if b_fix[j] == 1]
         if not I_open or not J_open:
             return None
 
-        mdl = Model(name="TSCFL_repair", log_output=False)
-        mdl.parameters.threads = threads
+        # Modelo CPLEX
+        mdl = Model(name="TSCFL_heuristic", log_output=False)
 
-        xR = {
-            (i, j): mdl.continuous_var(lb=0.0, name=f"x_{i}_{j}")
-            for i in I_open
-            for j in J_open
-        }
-        yR = {
-            (j, k): mdl.continuous_var(lb=0.0, name=f"y_{j}_{k}")
-            for j in J_open
-            for k in range(inst.nK)
-        }
+        xR = mdl.continuous_var_dict(
+            [(i, j) for i in I_open for j in J_open], lb=0.0, name="x"
+        )
+        yR = mdl.continuous_var_dict(
+            [(j, k) for j in J_open for k in self.inst.K], lb=0.0, name="y"
+        )
 
-        # capacities (only open sets)
+        # capacidades
         mdl.add_constraints_(
-            mdl.sum(xR[i, j] for j in J_open) <= inst.p[i] for i in I_open
+            mdl.sum(xR[i, j] for j in J_open) <= self.inst.p[i] for i in I_open
         )
         mdl.add_constraints_(
-            mdl.sum(yR[j, k] for k in range(inst.nK)) <= inst.q[j] for j in J_open
+            mdl.sum(yR[j, k] for k in range(self.inst.nK)) <= self.inst.q[j]
+            for j in J_open
         )
-        # balance at depots (only open depots)
+        # balanço dos depósitos
         mdl.add_constraints_(
             mdl.sum(xR[i, j] for i in I_open)
-            == mdl.sum(yR[j, k] for k in range(inst.nK))
+            == mdl.sum(yR[j, k] for k in range(self.inst.nK))
             for j in J_open
         )
-        # customer demands (sum over open depots)
+        # demandas dos consumidores
         mdl.add_constraints_(
-            mdl.sum(yR[j, k] for j in J_open) == inst.r[k] for k in range(inst.nK)
+            mdl.sum(yR[j, k] for j in J_open) == self.inst.r[k]
+            for k in range(self.inst.nK)
         )
 
-        flow_cost = mdl.sum(inst.c[i, j] * xR[i, j] for (i, j) in xR) + mdl.sum(
-            inst.d[j, k] * yR[j, k] for (j, k) in yR
-        )
-        fixed_cost = float(
-            np.dot(inst.f[I_open], np.ones(len(I_open)))
-            + np.dot(inst.g[J_open], np.ones(len(J_open)))
-        )
-        mdl.minimize(flow_cost + fixed_cost)
+        # objetivo
+        cost_fixed1 = np.dot(self.inst.f[I_open], np.ones(len(I_open)))
+        cost_fixed2 = np.dot(self.inst.g[J_open], np.ones(len(J_open)))
 
-        sol = mdl.solve()
-        return None if not sol else float(sol.objective_value)
+        cost_flow1 = mdl.sum(self.inst.c[i, j] * xR[i, j] for (i, j) in xR)
+        cost_flow2 = mdl.sum(self.inst.d[j, k] * yR[j, k] for (j, k) in yR)
 
-    # ==============================
-    # Main NDRC loop — same logic
-    # ==============================
+        mdl.minimize(cost_fixed1 + cost_fixed2 + cost_flow1 + cost_flow2)
+
+        solution = mdl.solve()
+
+        return None if not solution else float(solution.objective_value)
+
     def solve(self) -> None:
-        inst = self.inst
-        alpha = self.alpha
-        beta = self.beta
-        age_alpha = self.age_alpha
-        age_beta = self.age_beta
+        """
+        Loop principal do NDRC.
+        """
+        time_start = perf_counter()
 
-        L_best = self.L_best
-        z_best = self.z_best
-        a_inc = self.a_inc
-        b_inc = self.b_inc
+        while self.iter < self.max_iter and self.time <= self.time_limit:
+            self.iter += 1
 
-        # epsilon schedule (used only while UB unknown)
-        eps = float(self.eps0)
-        since_improve = 0
+            # (1) resolve o subproblema lagrangeano
+            L_k, a_k, b_k, subgrad_k = self._solve_lrp(self.lamb)
 
-        for it in range(1, self.max_iter + 1):
-            # (1) solve LRP(α,β) greedily
-            L_k, a_k, b_k, x_k, y_k, gA_k, gB_k = self._solve_lrp_greedy(alpha, beta)
+            # (2) manutenção de LB/UB
+            lb_improved = L_k > self.L_best
+            if lb_improved:
+                self.L_best = L_k
 
-            # (2) LB/UB maintenance
-            improved = L_k > L_best + 1e-12
-            if improved:
-                L_best = L_k
-                since_improve = 0
-            else:
-                since_improve += 1
+            if (self.iter == 1) or lb_improved or (self.iter % 25 == 0):
+                z_try = self._solve_heuristic(a_k, b_k)
+                if (z_try is not None) and (z_try < self.z_best):
+                    self.z_best = z_try
+                    self.a_best = a_k.copy()
+                    self.b_best = b_k.copy()
 
-            if (it == 1) or improved or (it % 25 == 0):
-                z_try = self._repair_ub(a_k, b_k)
-                if (z_try is not None) and (z_try + 1e-8 < z_best):
-                    z_best = z_try
-                    a_inc = a_k.copy()
-                    b_inc = b_k.copy()
-
-            # (3) CA/PA/CI & non-delayed zeroing for both families
-            CA_a = np.where(np.abs(gA_k) > self.viol_tol)[0]
-            PA_a = np.where(alpha != 0.0)[0]
-            CI_a = np.setdiff1d(
-                np.arange(inst.nJ), np.union1d(CA_a, PA_a), assume_unique=False
+            # (3) gerenciamento de CA/PA/CI
+            CA_idx = np.where(~np.isclose(subgrad_k, 0.0))[0]
+            PA_idx = np.where(~np.isclose(self.lamb, 0.0))[0]
+            CI_idx = np.setdiff1d(
+                np.arange(self.lamb.size),
+                np.union1d(CA_idx, PA_idx),
+                assume_unique=False,
             )
 
-            CA_b = np.where(np.abs(gB_k) > self.viol_tol)[0]
-            PA_b = np.where(beta != 0.0)[0]
-            CI_b = np.setdiff1d(
-                np.arange(inst.nK), np.union1d(CA_b, PA_b), assume_unique=False
-            )
+            subgrad_k[CI_idx] = 0.0
+            self.lamb_age[CA_idx] = 0
 
-            gA_nd = gA_k.copy()
-            gB_nd = gB_k.copy()
-            if CI_a.size:
-                gA_nd[CI_a] = 0.0
-            if CI_b.size:
-                gB_nd[CI_b] = 0.0
-
-            age_alpha[CA_a] = 0
-            dropA = np.setdiff1d(PA_a, CA_a, assume_unique=False)
-            if dropA.size:
-                age_alpha[dropA] += 1
-                to_zero = dropA[age_alpha[dropA] > self.dual_keep]
+            drop_idx = np.setdiff1d(PA_idx, CA_idx, assume_unique=False)
+            if drop_idx.size:
+                self.lamb_age[drop_idx] += 1
+                to_zero = drop_idx[self.lamb_age[drop_idx] > self.dual_keep]
                 if to_zero.size:
-                    alpha[to_zero] = 0.0
-                    age_alpha[to_zero] = 0
+                    self.lamb[to_zero] = 0.0
+                    self.lamb_age[to_zero] = 0
 
-            age_beta[CA_b] = 0
-            dropB = np.setdiff1d(PA_b, CA_b, assume_unique=False)
-            if dropB.size:
-                age_beta[dropB] += 1
-                to_zero = dropB[age_beta[dropB] > self.dual_keep]
-                if to_zero.size:
-                    beta[to_zero] = 0.0
-                    age_beta[to_zero] = 0
-
-            # (4) stepsize and dual update
-            denom = float(np.dot(gA_nd, gA_nd) + np.dot(gB_nd, gB_nd))
+            # (4) tamanho de passo e atualização do dual
+            denom = np.dot(subgrad_k, subgrad_k)
             if denom > 0.0:
-                if np.isfinite(z_best):
-                    mu = self.gamma * max(z_best - L_k, 0.0) / denom
+                if np.isfinite(self.z_best):
+                    mu = self.gamma * max(self.z_best - L_k, 0.0) / denom
                 else:
-                    mu = eps / denom
-                alpha = alpha + mu * gA_nd
-                beta = beta + mu * gB_nd
+                    mu = self.gamma / denom
 
-            # (5) epsilon schedule while UB unknown
-            if (
-                (not np.isfinite(z_best))
-                and (since_improve >= self.stall_halve)
-                and (eps > self.eps_min)
-            ):
-                eps = max(eps * 0.5, self.eps_min)
-                since_improve = 0
+                self.lamb = self.lamb + mu * subgrad_k
 
-            # (6) stopping by gap when UB exists
-            if np.isfinite(z_best):
-                gap = z_best - L_best
-                if gap <= self.tol_stop * max(1.0, abs(z_best)):
-                    if self.log:
-                        print(
-                            f"[NDRC] it={it}  LRP(α,β)={L_k:.6f}  LB={L_best:.6f}  UB={z_best:.6f}  "
-                            f"||g_nd||={np.sqrt(denom):.3e}  "
-                            f"|CAα|={CA_a.size} |PAα|={PA_a.size} |CIα|={CI_a.size}  "
-                            f"|CAβ|={CA_b.size} |PAβ|={PA_b.size} |CIβ|={CI_b.size}"
-                        )
-                    self.iterations = it
+            # (5) condição de encerramento
+            if np.isfinite(self.z_best):
+                self.gap = (self.z_best - self.L_best) / max(1.0, abs(self.z_best))
+                if self.gap <= self.tol_stop:
                     break
 
-            if self.log and (it % 5 == 0 or it == 1):
+            # log do loop
+            self.time = perf_counter() - time_start
+
+            if self.log_output and (self.iter % 20 == 0):
+                norm_g = float(np.sqrt(denom))
                 print(
-                    f"[NDRC] it={it:4d}  LRP(α,β)={L_k:.6f}  LB={L_best:.6f}  "
-                    f"UB={(z_best if np.isfinite(z_best) else float('inf')):.6f}  "
-                    f"||g_nd||={np.sqrt(denom):.3e}  "
-                    f"|CAα|={CA_a.size} |PAα|={PA_a.size} |CIα|={CI_a.size}  "
-                    f"|CAβ|={CA_b.size} |PAβ|={PA_b.size} |CIβ|={CI_b.size}"
+                    f"[NDRC] it={self.iter:4d}  time={round(self.time):4d}s    "
+                    f"LRP={L_k:10.3f}  LB={self.L_best:10.3f}  UB={self.z_best:10.3f}  "
+                    f"||subgrad||^2={norm_g:.3e}  |CA|={CA_idx.size:3d}  |PA|={PA_idx.size:3d}  |CI|={CI_idx.size:3d}"
                 )
 
-            self.iterations = it
-
-        # last-chance UB if none found
-        if not np.isfinite(z_best):
-            fallback_a = (
-                a_inc
-                if a_inc.sum()
-                else (a_k if "a_k" in locals() else np.zeros(inst.nI, dtype=int))
-            )
-            fallback_b = (
-                b_inc
-                if b_inc.sum()
-                else (b_k if "b_k" in locals() else np.zeros(inst.nJ, dtype=int))
-            )
-            z_try = self._repair_ub(fallback_a, fallback_b)
-            if z_try is not None:
-                z_best = z_try
-
-        # persist back to the object state
-        self.alpha = alpha
-        self.beta = beta
-        self.age_alpha = age_alpha
-        self.age_beta = age_beta
-        self.L_best = L_best
-        self.z_best = z_best
-        self.a_inc = a_inc
-        self.b_inc = b_inc
-        # same as original: no explicit return
         return None
 
 
@@ -529,7 +407,7 @@ def main():
 
     instance = TSCFLInstance.from_txt(PATH)
 
-    solver = RelaxAndCutTSCFL(instance, max_iter=1000, log=True)
+    solver = RelaxAndCutTSCFL(instance, time_limit=20, log_output=True)
     solver.solve()
 
     return

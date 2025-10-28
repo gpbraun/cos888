@@ -125,12 +125,19 @@ def solve_instance(inst: TSCFLInstance) -> None:
     cost_fixed1 = mdl.sum(inst.f[i] * a[i] for i in inst.I)
     cost_fixed2 = mdl.sum(inst.g[j] * b[j] for j in inst.J)
 
-    cost_stage1 = mdl.sum(inst.c[i, j] * x[i, j] for i, j in inst.IJ)
-    cost_stage2 = mdl.sum(inst.d[j, k] * y[j, k] for j, k in inst.JK)
+    cost_flow1 = mdl.sum(inst.c[i, j] * x[i, j] for i, j in inst.IJ)
+    cost_flow2 = mdl.sum(inst.d[j, k] * y[j, k] for j, k in inst.JK)
 
-    mdl.minimize(cost_fixed1 + cost_fixed2 + cost_stage1 + cost_stage2)
+    mdl.minimize(cost_fixed1 + cost_fixed2 + cost_flow1 + cost_flow2)
 
-    mdl.solve()
+    solution = mdl.solve()
+
+    if solution:
+        print(f"\nSolved.\n")
+        print(f"objective  = {solution.objective_value:.2f}")
+        print(f"best bound = {solution.solve_details.best_bound:.2f}")
+
+        print(f"\n{solution.solve_details}")
 
 
 def main():

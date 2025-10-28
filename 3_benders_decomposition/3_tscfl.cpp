@@ -1,5 +1,5 @@
 // 3_tscfl.cpp
-// COS888 – Benders decomposition for the Two-Stage Capacitated Facility Location (TSCFL)
+// COS888 – Benders decomposition for the Two-stage Capacitated Facility Location (TSCFL)
 // Master MIP + Worker LP (dual) + lazy/user cut callbacks (ilobendersatsp2.cpp style)
 // This version fixes dual signs AND uses hierarchical parameter API.
 

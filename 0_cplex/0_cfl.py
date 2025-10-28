@@ -88,11 +88,18 @@ def solve_instance(inst: CFLInstance) -> None:
 
     # OBJETIVO
     cost_fixed = mdl.sum(inst.f[i] * a[i] for i in inst.I)
-    cost_stage = mdl.sum(inst.c[i, j] * x[i, j] for i, j in inst.IJ)
+    cost_flow = mdl.sum(inst.c[i, j] * x[i, j] for i, j in inst.IJ)
 
-    mdl.minimize(cost_fixed + cost_stage)
+    mdl.minimize(cost_fixed + cost_flow)
 
-    mdl.solve()
+    solution = mdl.solve()
+
+    if solution:
+        print(f"\nSolved.\n")
+        print(f"objective  = {solution.objective_value:.2f}")
+        print(f"best bound = {solution.solve_details.best_bound:.2f}")
+
+        print(f"\n{solution.solve_details}")
 
 
 def main():

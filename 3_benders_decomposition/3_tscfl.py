@@ -124,13 +124,13 @@ def solve_instance(inst: TSCFLInstance, log_output: bool = True):
     mdl.add_constraints_((y[j, k] <= inst.r[k] * b[j]) for j, k in inst.JK)
 
     # objetivo
-    cost_stage1 = mdl.sum(inst.c[i, j] * x[i, j] for i, j in inst.IJ)
-    cost_stage2 = mdl.sum(inst.d[j, k] * y[j, k] for j, k in inst.JK)
+    cost_flow1 = mdl.sum(inst.c[i, j] * x[i, j] for i, j in inst.IJ)
+    cost_flow2 = mdl.sum(inst.d[j, k] * y[j, k] for j, k in inst.JK)
     cost_fixed = mdl.sum(inst.f[i] * a[i] for i in inst.I) + mdl.sum(
         inst.g[j] * b[j] for j in inst.J
     )
 
-    mdl.minimize(cost_fixed + cost_stage1 + cost_stage2)
+    mdl.minimize(cost_fixed + cost_flow1 + cost_flow2)
 
     sol = mdl.solve()
     return sol.objective_value

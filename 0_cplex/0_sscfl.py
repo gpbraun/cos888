@@ -90,16 +90,19 @@ def solve_instance(inst: SSCFLInstance) -> None:
 
     # OBJETIVO
     cost_fixed = mdl.sum(inst.f[i] * a[i] for i in inst.I)
-    cost_stage = mdl.sum(inst.c[i, j] * x[i, j] for i, j in inst.IJ)
+    cost_flow = mdl.sum(inst.c[i, j] * x[i, j] for i, j in inst.IJ)
 
-    mdl.minimize(cost_fixed + cost_stage)
+    mdl.minimize(cost_fixed + cost_flow)
 
     # solve
-    sol = mdl.solve()
+    solution = mdl.solve()
 
-    if sol:
-        print(f"LB: {sol.objective_value}, UB: {sol.solve_details.best_bound}")
-        print(sol.solve_details)
+    if solution:
+        print(f"\nSolved.\n")
+        print(f"objective  = {solution.objective_value:.2f}")
+        print(f"best bound = {solution.solve_details.best_bound:.2f}")
+
+        print(f"\n{solution.solve_details}")
 
 
 def main():

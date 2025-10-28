@@ -95,9 +95,9 @@ def solve_instance_cp_naive(
 
     # objetivo: custo fixo + custo de atribuição
     cost_fixed = mdl.sum(inst.f[i] * a[i] for i in inst.I)
-    cost_stage = mdl.sum(inst.c[i, j] * inst.r[j] * x[i, j] for (i, j) in inst.IJ)
+    cost_flow = mdl.sum(inst.c[i, j] * inst.r[j] * x[i, j] for (i, j) in inst.IJ)
 
-    mdl.minimize(cost_fixed + cost_stage)
+    mdl.minimize(cost_fixed + cost_flow)
 
     # solve
     mdl.solve(
