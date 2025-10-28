@@ -1,7 +1,7 @@
 /*
 COS888
 
-TSCFL com CPLEX
+TSCFL por Non-Delayed Relax-and-Cut
 
 Gabriel Braun, 2025
 */
@@ -28,7 +28,10 @@ ILOSTLBEGIN
 //  UTILS
 // =====================================================================
 
-// Comparação com tolerância (equivalente ao np.isclose)
+// Acesso em matriz 2D
+static inline size_t idx2(size_t i, size_t j, size_t ncols) { return i * ncols + j; }
+
+// Comparação com tolerância
 static inline bool is_close(double x, double y = 0.0, double tol = 1e-12)
 {
     return std::abs(x - y) <= tol;
@@ -70,9 +73,6 @@ static inline std::vector<std::pair<int, int>> cart_prod(int nA, int nB)
     return v;
 }
 
-// Acesso em matriz 2D
-static inline size_t idx2(size_t i, size_t j, size_t ncols) { return i * ncols + j; }
-
 // =====================================================================
 //  INSTÂNCIA
 // =====================================================================
@@ -83,7 +83,6 @@ static inline size_t idx2(size_t i, size_t j, size_t ncols) { return i * ncols +
 class TSCFLInstance
 {
 public:
-    // Tamanhos
     int nI; // |I| plantas
     int nJ; // |J| depósitos
     int nK; // |K| clientes
@@ -96,13 +95,11 @@ public:
     std::vector<double> q; // q_j  = capacidade do depósito j
     std::vector<double> r; // r_k  = demanda do cliente k
 
-    // Acesso conveniente
     inline double C(int i, int j) const { return c[idx2(i, j, nJ)]; }
     inline double &C(int i, int j) { return c[idx2(i, j, nJ)]; }
     inline double D(int j, int k) const { return d[idx2(j, k, nK)]; }
     inline double &D(int j, int k) { return d[idx2(j, k, nK)]; }
 
-    // "Propriedades" estilo Python
     std::vector<int> I() const { return range_int(nI); }
     std::vector<int> J() const { return range_int(nJ); }
     std::vector<int> K() const { return range_int(nK); }

@@ -1,7 +1,7 @@
 """
 COS888
 
-TSCFL por Relax-and-Cut
+TSCFL por Non-Delayed Relax-and-Cut
 
 Gabriel Braun, 2025
 """
