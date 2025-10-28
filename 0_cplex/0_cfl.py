@@ -102,6 +102,8 @@ def solve_instance(inst: CFLInstance) -> None:
 
         print(f"\n{solution.solve_details}")
 
+    return solution
+
 
 def main():
     """

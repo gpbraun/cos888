@@ -104,12 +104,14 @@ def solve_instance(inst: SSCFLInstance) -> None:
 
         print(f"\n{solution.solve_details}")
 
+    return solution
+
 
 def main():
     """
     Rotina principal
     """
-    PATH = "instances/sscfl/yang/sscfl_y_a1.txt"
+    PATH = "instances/sscfl/holmberg/sscfl_h_40.txt"
 
     instance = SSCFLInstance.from_txt(PATH)
 

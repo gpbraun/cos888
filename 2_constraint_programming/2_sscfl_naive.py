@@ -23,10 +23,10 @@ class SSCFLInstance:
     nI: int  # |I| plantas
     nJ: int  # |J| clientes
 
-    f: np.ndarray  # f_i = custo fixo da planta i
+    f: np.ndarray  # f_i  = custo fixo da planta i
     c: np.ndarray  # c_ij = custo unitário planta i -> cliente j
-    p: np.ndarray  # p_i = capacidade da planta i
-    r: np.ndarray  # r_j = demanda do cliente j
+    p: np.ndarray  # p_i  = capacidade da planta i
+    r: np.ndarray  # r_j  = demanda do cliente j
 
     @property
     def I(self) -> list[int]:
@@ -111,7 +111,7 @@ def main():
     """
     Rotina principal
     """
-    PATH = "instances/sscfl/holmberg/sscfl_h_05.txt"
+    PATH = "instances/sscfl/holmberg/sscfl_h_40.txt"
 
     instance = SSCFLInstance.from_txt(PATH)
 

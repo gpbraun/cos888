@@ -1,7 +1,7 @@
 """
 COS888
 
-TSCFL com CPLEX
+TSCFL por Relax-and-Cut
 
 Gabriel Braun, 2025
 """

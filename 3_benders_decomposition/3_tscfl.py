@@ -1,7 +1,7 @@
 """
 COS888
 
-TSCFL com CPLEX — Benders (callbacks) + recuperação de fluxo
+TSCFL por Decomposição de Benders
 
 Gabriel Braun, 2025
 """
@@ -88,72 +88,77 @@ class TSCFLInstance:
 
 class _BendersWorkerDual:
     """
-    Worker LP.
+    Worker LP (dual do subproblema de fluxo).
     """
 
     def __init__(self, inst: TSCFLInstance, *, log: bool = False) -> None:
         self.inst = inst
         self.log = log
 
-        m = Model(name="TSCFL_worker_dual", log_output=log)
-        self.m = m
-        inf = m.infinity
+        mdl = Model(name="TSCFL_worker_dual", log_output=log)
+        self.mdl = mdl
+        inf = mdl.infinity
 
         # variáveis: alpha, beta ≤ 0 ; gamma, delta livres
-        self.alpha = m.continuous_var_list(inst.nI, lb=-inf, ub=0.0, name="alpha")
-        self.beta = m.continuous_var_list(inst.nJ, lb=-inf, ub=0.0, name="beta")
-        self.gamma = m.continuous_var_list(inst.nJ, lb=-inf, name="gamma")
-        self.delta = m.continuous_var_list(inst.nK, lb=-inf, name="delta")
+        self.alpha = mdl.continuous_var_list(inst.nI, lb=-inf, ub=0.0, name="alpha")
+        self.beta = mdl.continuous_var_list(inst.nJ, lb=-inf, ub=0.0, name="beta")
+        self.gamma = mdl.continuous_var_list(inst.nJ, lb=-inf, name="gamma")
+        self.delta = mdl.continuous_var_list(inst.nK, lb=-inf, name="delta")
 
-        m.add(self.alpha[i] + self.gamma[j] <= inst.c[i, j] for i, j in self.IJ)
-        m.add(
-            self.beta[j] - self.gamma[j] + self.delta[k] <= inst.d[j, k]
-            for j, k in self.JK
-        )
+        # alpha_i + gamma_j ≤ c_ij
+        for i in inst.I:
+            for j in inst.J:
+                mdl.add(self.alpha[i] + self.gamma[j] <= float(inst.c[i, j]))
 
-        # objeto será trocado a cada chamada
-        m.maximize(0)
+        # beta_j - gamma_j + delta_k ≤ d_jk
+        for j in inst.J:
+            for k in inst.K:
+                mdl.add(
+                    self.beta[j] - self.gamma[j] + self.delta[k] <= float(inst.d[j, k])
+                )
 
-        # worker em callbacks: 1 thread
-        m.context.cplex_parameters.threads = 1
+        mdl.maximize(0)
 
-    def solve_with(self, x_val: np.ndarray, y_val: np.ndarray):
+        # worker em callback: 1 thread por segurança
+        mdl.context.cplex_parameters.threads = 1
+
+    def solve_with(self, a_val: np.ndarray, b_val: np.ndarray):
         """
-        Resolve o dual para (x,y) dados e retorna (θ, coef_x, coef_y, rhs).
+        Resolve o dual para (a, b) dados. Retorna (theta, coef_a, coef_b, rhs).
         """
         inst = self.inst
-        m = self.m
+        mdl = self.mdl
 
-        # objetivo dependente de (x,y)
+        # objetivo dependente de (a, b)
         obj = (
-            m.sum(inst.p[i] * float(x_val[i]) * self.alpha[i] for i in inst.I)
-            + m.sum(inst.q[j] * float(y_val[j]) * self.beta[j] for j in inst.J)
-            + m.sum(inst.r[k] * self.delta[k] for k in inst.K)
+            mdl.sum(inst.p[i] * a_val[i] * self.alpha[i] for i in inst.I)
+            + mdl.sum(inst.q[j] * b_val[j] * self.beta[j] for j in inst.J)
+            + mdl.sum(inst.r[k] * self.delta[k] for k in inst.K)
         )
-        m.set_objective("max", obj)
+        mdl.set_objective("max", obj)
 
-        sol = m.solve(log_output=self.log)
+        sol = mdl.solve(log_output=self.log)
         if sol is None:
             raise RuntimeError("Worker dual não resolveu (inesperado).")
 
-        theta = float(m.objective_value)
+        theta = mdl.objective_value
 
-        # multiplicadores
+        # multiplicadores ótimos
         alpha_v = np.array([self.alpha[i].solution_value for i in inst.I], dtype=float)
         beta_v = np.array([self.beta[j].solution_value for j in inst.J], dtype=float)
         delta_v = np.array([self.delta[k].solution_value for k in inst.K], dtype=float)
 
-        # coeficientes do corte
-        coef_x = inst.p * alpha_v  # ≤ 0
-        coef_y = inst.q * beta_v  # ≤ 0
+        # coeficientes do corte (notar sinais: alpha,beta ≤ 0)
+        coef_a = inst.p * alpha_v  # coeficientes para a_i
+        coef_b = inst.q * beta_v  # coeficientes para b_j
         rhs = np.dot(inst.r, delta_v)
 
-        return theta, coef_x, coef_y, rhs
+        return theta, coef_a, coef_b, rhs
 
 
 class _BendersLazyCallback(ConstraintCallbackMixin, cpx_cb.LazyConstraintCallback):
     """
-    Lazy: corta soluções incumbentes inteiras.
+    Lazy: corta incumbentes inteiros (a, b) com η subestimando φ(a, b).
     """
 
     def __init__(self, env):
@@ -161,25 +166,25 @@ class _BendersLazyCallback(ConstraintCallbackMixin, cpx_cb.LazyConstraintCallbac
         ConstraintCallbackMixin.__init__(self)
         self.inst: Optional[TSCFLInstance] = None
         self.worker: Optional[_BendersWorkerDual] = None
-        self.x = None
-        self.y = None
+        self.a = None
+        self.b = None
         self.eta = None
 
     def __call__(self):
         try:
-            sol = self.make_solution_from_vars(list(self.x) + list(self.y) + [self.eta])
+            sol = self.make_solution_from_vars(list(self.a) + list(self.b) + [self.eta])
 
-            x_val = np.array([sol.get_value(v) for v in self.x], dtype=float)
-            y_val = np.array([sol.get_value(v) for v in self.y], dtype=float)
-            eta_val = sol.get_value(self.eta)
+            a_val = np.array([sol.get_value(v) for v in self.a], dtype=float)
+            b_val = np.array([sol.get_value(v) for v in self.b], dtype=float)
+            eta_val = float(sol.get_value(self.eta))
 
-            theta, coef_x, coef_y, rhs = self.worker.solve_with(x_val, y_val)
+            theta, coef_a, coef_b, rhs = self.worker.solve_with(a_val, b_val)
 
-            # comparação direta
+            # violação direta
             if theta > eta_val:
                 cut_ct = self.eta >= rhs + sum(
-                    coef_x[i] * self.x[i] for i in self.inst.I
-                ) + sum(coef_y[j] * self.y[j] for j in self.inst.J)
+                    float(coef_a[i]) * self.a[i] for i in self.inst.I
+                ) + sum(float(coef_b[j]) * self.b[j] for j in self.inst.J)
                 lhs, sense, rhs_num = self.linear_ct_to_cplex(cut_ct)
                 self.add(lhs, sense, rhs_num)
 
@@ -189,7 +194,7 @@ class _BendersLazyCallback(ConstraintCallbackMixin, cpx_cb.LazyConstraintCallbac
 
 class _BendersUserCutCallback(ConstraintCallbackMixin, cpx_cb.UserCutCallback):
     """
-    User cut: separa cortes em nós fracionários (global).
+    User cut: separa cortes globalmente em nós fracionários.
     """
 
     def __init__(self, env):
@@ -197,25 +202,24 @@ class _BendersUserCutCallback(ConstraintCallbackMixin, cpx_cb.UserCutCallback):
         ConstraintCallbackMixin.__init__(self)
         self.inst: Optional[TSCFLInstance] = None
         self.worker: Optional[_BendersWorkerDual] = None
-        self.x = None
-        self.y = None
+        self.a = None
+        self.b = None
         self.eta = None
 
     def __call__(self):
         try:
             sol = self.make_complete_solution()
 
-            x_val = np.array([sol.get_value(v) for v in self.x], dtype=float)
-            y_val = np.array([sol.get_value(v) for v in self.y], dtype=float)
+            a_val = np.array([sol.get_value(v) for v in self.a], dtype=float)
+            b_val = np.array([sol.get_value(v) for v in self.b], dtype=float)
             eta_val = sol.get_value(self.eta)
 
-            theta, coef_x, coef_y, rhs = self.worker.solve_with(x_val, y_val)
+            theta, coef_a, coef_b, rhs = self.worker.solve_with(a_val, b_val)
 
-            # comparação direta
             if theta > eta_val:
                 cut_ct = self.eta >= rhs + sum(
-                    coef_x[i] * self.x[i] for i in self.inst.I
-                ) + sum(coef_y[j] * self.y[j] for j in self.inst.J)
+                    coef_a[i] * self.a[i] for i in self.inst.I
+                ) + sum(coef_b[j] * self.b[j] for j in self.inst.J)
                 lhs, sense, rhs_num = self.linear_ct_to_cplex(cut_ct)
                 self.add(lhs, sense, rhs_num)
 
@@ -225,15 +229,15 @@ class _BendersUserCutCallback(ConstraintCallbackMixin, cpx_cb.UserCutCallback):
 
 class BendersTSCFL:
     """
-    Resolve TSCFL via Benders (callbacks) com recuperação do fluxo.
+    Resolve a instância usando o método: Benders Decomposition.
     """
 
     def __init__(
         self,
         inst: TSCFLInstance,
         *,
-        threads: int = 1,
-        time_limit: int = 1000,
+        time_limit: Optional[float] = None,
+        threads: Optional[int] = None,
         log_output: bool = True,
     ) -> None:
         self.inst = inst
@@ -243,111 +247,118 @@ class BendersTSCFL:
 
     def solve(self) -> None:
         """
-        Master + callbacks + recuperação de fluxo.
+        Master + callbacks + recuperação de fluxo (x,y).
+        Imprime informações relevantes; não retorna nada.
         """
-        inst = self.inst
-        I, J, K = inst.I, inst.J, inst.K
-        demand_total = inst.r.sum()
+        # MASTER BENDERS
+        mdl = Model(name="TSCFL_Benders_Master", log_output=self.log_output)
+        mdl.parameters.mip.strategy.search = 1  # Traditional (para callbacks)
 
-        # master
-        mdl = Model(
-            name="TSCFL_Benders_Master",
-            log_output=self.log_output,
-            time_limit=self.time_limit,
-        )
-
-        # Traditional search (necessário p/ callbacks)
-        mdl.parameters.mip.strategy.search = 1
-        mdl.parameters.threads = self.threads
-
-        # variáveis do master
-        x = mdl.binary_var_list(inst.nI, name="x")
-        y = mdl.binary_var_list(inst.nJ, name="y")
+        # binárias a,b e variável eta
+        a = mdl.binary_var_list(self.inst.nI, name="a")
+        b = mdl.binary_var_list(self.inst.nJ, name="b")
         eta = mdl.continuous_var(lb=0.0, name="eta")
 
-        # capacidade agregada (viabilidade)
-        mdl.add(mdl.sum(inst.p[i] * x[i] for i in I) >= demand_total)
-        mdl.add(mdl.sum(inst.q[j] * y[j] for j in J) >= demand_total)
-
-        # objetivo: custos fixos + eta
-        mdl.minimize(
-            mdl.sum(inst.f[i] * x[i] for i in I)
-            + mdl.sum(inst.g[j] * y[j] for j in J)
-            + eta
+        # capacidade
+        mdl.add(
+            mdl.sum(self.inst.p[i] * a[i] for i in self.inst.I) >= self.inst.r.sum()
+        )
+        mdl.add(
+            mdl.sum(self.inst.q[j] * b[j] for j in self.inst.J) >= self.inst.r.sum()
         )
 
-        # worker dual
-        worker = _BendersWorkerDual(inst, log=False)
+        # OBJETIVO
+        cost_fixed1 = mdl.sum(self.inst.f[i] * a[i] for i in self.inst.I)
+        cost_fixed2 = mdl.sum(self.inst.g[j] * b[j] for j in self.inst.J)
 
-        # callbacks
+        mdl.minimize(cost_fixed1 + cost_fixed2 + eta)
+
+        # worker dual
+        worker = _BendersWorkerDual(self.inst, log=False)
+
+        # callbacks (sempre: lazy + user)
         lazy_cb = mdl.register_callback(_BendersLazyCallback)
-        lazy_cb.inst = inst
+        lazy_cb.inst = self.inst
         lazy_cb.worker = worker
-        lazy_cb.x = x
-        lazy_cb.y = y
+        lazy_cb.a = a
+        lazy_cb.b = b
         lazy_cb.eta = eta
 
         user_cb = mdl.register_callback(_BendersUserCutCallback)
-        user_cb.inst = inst
+        user_cb.inst = self.inst
         user_cb.worker = worker
-        user_cb.x = x
-        user_cb.y = y
+        user_cb.a = a
+        user_cb.b = b
         user_cb.eta = eta
 
         # solve master
-        master_solution = mdl.solve(log_output=self.log_output)
-        if master_solution is None:
-            raise RuntimeError("Benders master não encontrou solução. Ative o log.")
+        msol = mdl.solve(log_output=self.log_output)
 
-        x_val = np.array([v.solution_value for v in x], dtype=float)
-        y_val = np.array([v.solution_value for v in y], dtype=float)
-
-        # log master
         print(
-            f"[BENDERS] master: OBJ={master_solution.objective_value:.3f}  "
-            f"eta={master_solution.get_value(eta):.3f}  "
+            f"[BENDERS] master: OBJ={msol.objective_value:.3f}  "
+            f"eta={float(msol.get_value(eta)):.3f}  "
             f"gap={mdl.solve_details.mip_relative_gap:.3%}  "
             f"nodes={mdl.solve_details.nb_nodes_processed}  "
             f"time={mdl.solve_details.time:.2f}s"
         )
 
-        # recuperação de fluxo com aberturas fixadas
-        flow = Model(name="TSCFL_FlowRecover", log_output=False)
+        # RECUPERAÇÃO DE FLUXO
+        a_val = np.round([v.solution_value for v in a]).astype(int)
+        b_val = np.round([v.solution_value for v in b]).astype(int)
 
-        # variáveis
-        u = flow.continuous_var_dict(inst.IJ, lb=0.0, name="u")
-        v = flow.continuous_var_dict(inst.JK, lb=0.0, name="v")
+        x_val, y_val = self.recover_flows(a_val, b_val)
 
-        # capacidades
-        flow.add(flow.sum(u[i, j] for j in J) <= inst.p[i] * round(x_val[i]) for i in I)
-        flow.add(flow.sum(v[j, k] for k in K) <= inst.q[j] * round(y_val[j]) for j in J)
-        # balanço no depósito
-        flow.add(
-            flow.sum(u[i, j] for i in I) == flow.sum(v[j, k] for k in K) for j in J
+    def recover_flows(
+        self, a_val: np.ndarray, b_val: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Resolve um LP de transporte com aberturas fixadas para materializar os fluxos.
+        """
+        mdl = Model(name="TSCFL_FlowRecover", log_output=False)
+
+        # VARIÁVEIS
+        #   x_ij = fluxo: planta i -> satélite j
+        #   y_jk = fluxo: satélite j -> cliente k
+        x = mdl.continuous_var_dict(self.inst.IJ, lb=0.0, name="x")  # i→j
+        y = mdl.continuous_var_dict(self.inst.JK, lb=0.0, name="y")  # j→k
+
+        # Capacidades
+        mdl.add_constraints_(
+            mdl.sum(x[i, j] for j in self.inst.J) <= self.inst.p[i] * a_val[i]
+            for i in self.inst.I
         )
-        # demanda dos clientes
-        flow.add(flow.sum(v[j, k] for j in J) == inst.r[k] for k in K)
-
-        flow.minimize(
-            flow.sum(inst.c[i, j] * u[i, j] for i in I for j in J)
-            + flow.sum(inst.d[j, k] * v[j, k] for j in J for k in K)
+        mdl.add_constraints_(
+            mdl.sum(y[j, k] for k in self.inst.K) <= self.inst.q[j] * b_val[j]
+            for j in self.inst.J
         )
-        flow_solution = flow.solve(log_output=self.log_output)
-        if flow_solution is None:
-            raise RuntimeError("LP de recuperação de fluxo inviável (inesperado).")
 
-        # custos
-        x_int = np.round(x_val).astype(int)
-        y_int = np.round(y_val).astype(int)
+        # Balanço nos depósitos
+        mdl.add_constraints_(
+            mdl.sum(x[i, j] for i in self.inst.I)
+            == mdl.sum(y[j, k] for k in self.inst.K)
+            for j in self.inst.J
+        )
+        # Demandas
+        mdl.add_constraints_(
+            mdl.sum(y[j, k] for j in self.inst.J) == self.inst.r[k] for k in self.inst.K
+        )
 
-        fixed_cost = np.dot(inst.f, x_int) + np.dot(inst.g, y_int)
-        flow_cost = flow.objective_value
-        total_cost = fixed_cost + flow_cost
+        # OBJETIVO
+        cost_flow1 = mdl.sum(self.inst.c[i, j] * x[i, j] for i, j in self.inst.IJ)
+        cost_flow2 = mdl.sum(self.inst.d[j, k] * y[j, k] for j, k in self.inst.JK)
 
-        # log recuperação de fluxo
-        print(f"[BENDERS] OBJ={total_cost:.3f}")
+        mdl.minimize(cost_flow1 + cost_flow2)
+        mdl.solve()
 
-        return None
+        # Monta matrizes x,y
+        x_val = np.zeros((self.inst.nI, self.inst.nJ), dtype=float)
+        y_val = np.zeros((self.inst.nJ, self.inst.nK), dtype=float)
+        for i, j in self.inst.IJ:
+            x_val[i, j] = x[i, j].solution_value
+        for j, k in self.inst.JK:
+            y_val[j, k] = y[j, k].solution_value
+
+        return x_val, y_val
 
 
 def main():

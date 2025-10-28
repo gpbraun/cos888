@@ -93,7 +93,7 @@ def solve_instance(inst: TSCFLInstance) -> None:
     #   a_i  = decisão: abre a planta i
     #   b_j  = decisão: abre o satélite j
     #   x_ij = fluxo: planta i -> satélite j
-    #   y_jk = fluxo: satélite i -> cliente k
+    #   y_jk = fluxo: satélite j -> cliente k
     a = mdl.binary_var_dict(inst.I, name="a")
     b = mdl.binary_var_dict(inst.J, name="b")
     x = mdl.continuous_var_dict(inst.IJ, lb=0.0, name="x")
@@ -139,6 +139,8 @@ def solve_instance(inst: TSCFLInstance) -> None:
         print(f"best bound = {solution.solve_details.best_bound:.2f}")
 
         print(f"\n{solution.solve_details}")
+
+    return solution
 
 
 def main():

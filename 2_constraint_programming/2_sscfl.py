@@ -98,7 +98,7 @@ def solve_instance_cp(
             )
 
     # GLOBAL CONSTRAINTS
-    # Bin packing of customer demands r into facilities via Y
+    # Bin packing das demandas (r) nas plantas (pela variável Y)
     mdl.add(mdl.pack([L[i] for i in inst.I], [Y[j] for j in inst.J], inst.r, used=U))
     # Conta quantos clientes cada planta recebe
     mdl.add(mdl.distribute(N, [Y[j] for j in inst.J], values=inst.I))
@@ -110,15 +110,6 @@ def solve_instance_cp(
     mdl.add(mdl.if_then(a[i] == 0, L[i] == 0) for i in inst.I)
     mdl.add(mdl.if_then(a[i] == 0, N[i] == 0) for i in inst.I)
     mdl.add(mdl.if_then(N[i] >= 1, a[i] == 1) for i in inst.I)
-
-    # Covering LB on number of opens (quick greedy cover)
-    need, acc = 0, 0
-    for cap in sorted(inst.p.astype(int), reverse=True):
-        need += 1
-        acc += cap
-        if acc >= inst.r.sum():
-            break
-    mdl.add(mdl.sum(a[i] for i in inst.I) >= need)
 
     # QUEBRA DE SIMETRIA
     # Cria uma chave para ordenar os gupos idênticos
@@ -141,7 +132,7 @@ def solve_instance_cp(
     mdl.minimize(cost_fixed + cost_flow)
 
     # SOLVE
-    mdl.solve(
+    return mdl.solve(
         LogVerbosity=("Terse" if log_output else "Quiet"),
         TimeLimit=time_limit,
         Workers=workers,
