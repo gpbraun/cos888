@@ -6,7 +6,6 @@ TSCFL por Decomposição de Benders
 Gabriel Braun, 2025
 */
 
-#include <ilcplex/ilocplex.h>
 #include <algorithm>
 #include <fstream>
 #include <iostream>
@@ -17,6 +16,7 @@ Gabriel Braun, 2025
 #include <cmath>
 #include <stdexcept>
 
+#include <ilcplex/ilocplex.h>
 ILOSTLBEGIN
 
 // =====================================================================
