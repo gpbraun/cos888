@@ -1,0 +1,10 @@
+sscfl_h_01.txt    time=0.82   LB=8848   UB=8848   OPT=8848
+sscfl_h_02.txt    time=0.81   LB=7913   UB=7913   OPT=7913
+sscfl_h_03.txt    time=0.77   LB=9314   UB=9314  OPT=9314
+sscfl_h_04.txt    time=0.91   LB=10713   UB=10713   OPT=10713
+sscfl_h_05.txt    time=0.79   LB=8838  UB=8838  OPT=8838
+sscfl_h_06.txt    time=0.68   LB=7777  UB=7777  OPT=7777
+sscfl_h_07.txt    time=0.68   LB=9488   UB=9488   OPT=9488
+sscfl_h_08.txt    time=0.93   LB=11088  UB=11088  OPT=11088
+sscfl_h_09.txt    time=0.54   LB=8462   UB=8462  OPT=8462
+sscfl_h_10.txt    time=0.45   LB=7617  UB=7617  OPT=7617

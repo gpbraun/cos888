@@ -143,11 +143,11 @@ def main():
     """
     Rotina principal
     """
-    PATH = "instances/sscfl/holmberg/sscfl_h_40.txt"
+    PATH = "instances/sscfl/holmberg/sscfl_h_10.txt"
 
     instance = SSCFLInstance.from_txt(PATH)
 
-    solve_instance_cp(instance, time_limit=100)
+    solve_instance_cp(instance, time_limit=200)
 
     return
 

@@ -456,7 +456,7 @@ public:
 //
 int main()
 {
-    const std::string PATH = "../instances/tscfl/tscfl_11_50.txt";
+    const std::string PATH = "../instances/tscfl/tscfl_15_100.txt";
 
     try
     {

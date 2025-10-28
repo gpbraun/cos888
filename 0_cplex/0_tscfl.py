@@ -147,7 +147,7 @@ def main():
     """
     Rotina principal
     """
-    PATH = "instances/tscfl/tscfl_12_50.txt"
+    PATH = "instances/tscfl/tscfl_15_100.txt"
 
     instance = TSCFLInstance.from_txt(PATH)
 

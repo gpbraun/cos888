@@ -181,7 +181,7 @@ class _BendersLazyCallback(ConstraintCallbackMixin, cpx_cb.LazyConstraintCallbac
             theta, coef_a, coef_b, rhs = self.worker.solve_with(a_val, b_val)
 
             # violação direta
-            if theta > eta_val:
+            if theta > eta_val + 1e-6:
                 cut_ct = self.eta >= rhs + sum(
                     float(coef_a[i]) * self.a[i] for i in self.inst.I
                 ) + sum(float(coef_b[j]) * self.b[j] for j in self.inst.J)
@@ -216,7 +216,7 @@ class _BendersUserCutCallback(ConstraintCallbackMixin, cpx_cb.UserCutCallback):
 
             theta, coef_a, coef_b, rhs = self.worker.solve_with(a_val, b_val)
 
-            if theta > eta_val:
+            if theta > eta_val + 1e-6:
                 cut_ct = self.eta >= rhs + sum(
                     coef_a[i] * self.a[i] for i in self.inst.I
                 ) + sum(coef_b[j] * self.b[j] for j in self.inst.J)

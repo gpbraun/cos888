@@ -794,14 +794,14 @@ public:
 //
 int main()
 {
-    const std::string PATH = "../instances/tscfl/tscfl_11_50.txt";
+    const std::string PATH = "../instances/tscfl/tscfl_15_100.txt";
 
     try
     {
         TSCFLInstance instance = TSCFLInstance::from_txt(PATH);
 
         // inst, gamma, dual_keep, tol, max_iter, time_limit, log
-        RelaxAndCutTSCFL solver(instance, 1.0, 5, 1.0e-6, 10000, 200, true);
+        RelaxAndCutTSCFL solver(instance, 1.0, 5, 1.0e-6, 100000, 200, true);
         solver.solve();
     }
     catch (const std::exception &e)
