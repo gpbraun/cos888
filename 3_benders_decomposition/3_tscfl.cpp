@@ -406,7 +406,7 @@ public:
             // parâmetros
             if (time_limit > 0)
                 cplex.setParam(IloCplex::Param::TimeLimit, static_cast<double>(time_limit));
-            cplex.setParam(IloCplex::Param::Threads, 0);                                   // CPLEX decide
+            cplex.setParam(IloCplex::Param::Threads, 0);
             cplex.setParam(IloCplex::Param::MIP::Strategy::Search, IloCplex::Traditional); // p/ callbacks
             if (!log_output)
             {
