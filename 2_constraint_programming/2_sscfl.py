@@ -78,14 +78,14 @@ def solve_instance_cp(
     # VARIÁVEIS
     #   a_i  = decisão: abre planta i
     #   Y_j = associação: cliente j -> planta i
-    a = mdl.binary_var_dict(inst.I, name="a")
-    Y = mdl.integer_var_dict(inst.J, 0, inst.nI - 1, name="Y")
+    a = mdl.binary_var_list(inst.nI, name="a")
+    Y = mdl.integer_var_list(inst.nJ, 0, inst.nI - 1, name="Y")
 
     # VARIÁVEIS AUXILIARES
     #   L_i = decisão: abre instalação i
     #   N_j = associação: instalação i -> cliente j
     #   U_j = #used containers (from pack)
-    L = mdl.integer_var_dict(inst.I, 0, inst.r.sum(), name="L")
+    L = mdl.integer_var_list(inst.nI, 0, inst.r.sum(), name="L")
     N = mdl.integer_var_list(inst.nI, 0, inst.nJ, name="N")
     U = mdl.integer_var(0, inst.nI, name="U")
 
@@ -99,13 +99,13 @@ def solve_instance_cp(
 
     # GLOBAL CONSTRAINTS
     # Bin packing das demandas (r) nas plantas (pela variável Y)
-    mdl.add(mdl.pack([L[i] for i in inst.I], [Y[j] for j in inst.J], inst.r, used=U))
+    mdl.add(mdl.pack(L, Y, inst.r, used=U))
     # Conta quantos clientes cada planta recebe
-    mdl.add(mdl.distribute(N, [Y[j] for j in inst.J], values=inst.I))
+    mdl.add(mdl.distribute(N, Y, values=inst.I))
 
     # CONSTRAINTS
     # capacidade
-    mdl.add(L[i] <= int(inst.p[i]) for i in inst.I)
+    mdl.add(L[i] <= inst.p[i] for i in inst.I)
     # Open <-> used: closed ⇒ L=0 & N=0 ; used ⇒ open
     mdl.add(mdl.if_then(a[i] == 0, L[i] == 0) for i in inst.I)
     mdl.add(mdl.if_then(a[i] == 0, N[i] == 0) for i in inst.I)
@@ -117,7 +117,7 @@ def solve_instance_cp(
     _, grp = np.unique(keys, axis=0, return_inverse=True)
 
     # Para cada grupo idêntico, forçar ordem lexicográfica em [O, L, N]
-    ng = int(grp.max()) + 1
+    ng = grp.max() + 1
     for g in range(ng):
         idxs = np.where(grp == g)[0]
         if idxs.size > 1:
