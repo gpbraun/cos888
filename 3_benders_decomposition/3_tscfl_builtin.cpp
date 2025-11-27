@@ -171,11 +171,12 @@ public:
             IloBoolVarArray b(env, inst.nJ); // depósitos
             for (int i = 0; i < inst.nI; ++i)
                 a[i] = IloBoolVar(env);
+
             for (int j = 0; j < inst.nJ; ++j)
                 b[j] = IloBoolVar(env);
 
-            IloNumVarArray x(env, inst.nI * inst.nJ, 0.0, IloInfinity, ILOFLOAT); // fluxos i->j
-            IloNumVarArray y(env, inst.nJ * inst.nK, 0.0, IloInfinity, ILOFLOAT); // fluxos j->k
+            IloNumVarArray x(env, inst.nI * inst.nJ, 0.0, IloInfinity, ILOFLOAT); // fluxos i -> j
+            IloNumVarArray y(env, inst.nJ * inst.nK, 0.0, IloInfinity, ILOFLOAT); // fluxos j -> k
 
             // RESTRIÇÕES
             // Capacidade das plantas
