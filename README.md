@@ -25,3 +25,9 @@ Resolução de problemas de localização de facilidade capacitada utilizando os
 2. Programação por Restrições
 3. Decomposição de Benders
 4. Geração de Colunas
+
+```shell
+cmake -S . -B build
+cmake --build build --config Release
+./build/tscfl_experiments
+```

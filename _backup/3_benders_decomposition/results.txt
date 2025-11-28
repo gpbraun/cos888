@@ -1,0 +1,10 @@
+tscfl_11_50.txt     time=3.20   LB=581431   UB=581472   OPT=581472
+tscfl_12_50.txt     time=4.63   LB=432703   UB=432703   OPT=413547
+tscfl_13_50.txt     time=200*   LB=2585524  UB=2614523  OPT=2614219
+tscfl_14_50.txt     time=200*   LB=414191   UB=414317   OPT=414317
+tscfl_15_50.txt     time=200*   LB=2665732  UB=2679477  OPT=2677579
+tscfl_11_100.txt    time=200*   LB=1163916  UB=1164316  OPT=1164316
+tscfl_12_100.txt    time=200*   LB=829912   UB=830380   OPT=830380
+tscfl_13_100.txt    time=200*   LB=5149964  UB=5194163  OPT=5190057
+tscfl_14_100.txt    time=200*   LB=817695   UB=819272   OPT=818729
+tscfl_15_100.txt    time=200*   LB=5327385  UB=5344456  OPT=5342596
