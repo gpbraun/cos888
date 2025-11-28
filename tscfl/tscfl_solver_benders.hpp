@@ -14,7 +14,7 @@ Gabriel Braun, 2025
 #include <string>
 #include <chrono>
 
-#include "tscfl_instance.hpp"
+#include "tscfl_instance.hpp" // aqui supomos que EPS e MIP_GAP estão definidos
 
 ILOSTLBEGIN
 
@@ -141,7 +141,7 @@ public:
 };
 
 // =====================================================================
-//  FUNÇÃO COMUM PARA CALLBACKS (Lazy + User)
+//  CALLBACK TEMPLATE (Lazy + User) — uma só implementação de main()
 // =====================================================================
 
 template <typename BaseCallback>
@@ -153,7 +153,6 @@ protected:
     IloBoolVarArray a;
     IloBoolVarArray b;
     IloNumVar eta;
-    bool is_user_cut; // true = UserCut, false = LazyLazyConstraint
 
 public:
     BendersCallbackT(
@@ -162,26 +161,25 @@ public:
         WorkerDual &worker_,
         IloBoolVarArray a_,
         IloBoolVarArray b_,
-        IloNumVar eta_,
-        bool is_user_cut_)
+        IloNumVar eta_)
+        //
         : BaseCallback(env),
           inst(inst_),
           worker(worker_),
           a(a_),
           b(b_),
-          eta(eta_),
-          is_user_cut(is_user_cut_)
+          eta(eta_)
     {
     }
 
-    IloCplex::CallbackI *duplicateCallback() const override
+    IloCplex::CallbackI *duplicateCallback() const ILO_OVERRIDE
     {
         return (new (this->getEnv()) BendersCallbackT(*this));
     }
 
-    void main() override
+    void main() ILO_OVERRIDE
     {
-        // 1) Lê solução corrente (a,b,eta)
+        // 1) Lê (a,b,eta) da solução corrente
         Vec av(inst.nI), bv(inst.nJ);
         for (int i = 0; i < inst.nI; ++i)
             av[i] = this->getValue(a[i]);
@@ -194,7 +192,7 @@ public:
         Vec coef_a, coef_b;
         worker.solve(av, bv, theta, coef_a, coef_b, rhs);
 
-        // 3) Verifica violação e adiciona corte
+        // 3) Se corte violado, adiciona
         if (theta - eta_val > EPS)
         {
             IloEnv env = this->getEnv();
@@ -206,21 +204,20 @@ public:
             for (int j = 0; j < inst.nJ; ++j)
                 lin += coef_b[j] * b[j];
 
-            if (is_user_cut)
-                this->add(eta >= lin, IloCplex::UseCutPurge);
-            else
-                this->add(eta >= lin);
+            // Funciona para Lazy e User: CPLEX decide como tratar
+            this->add(eta >= lin);
 
             lin.end();
         }
     }
 };
 
+// aliases para facilitar uso
 using LazyBendersCallbackI = BendersCallbackT<IloCplex::LazyConstraintCallbackI>;
 using UserBendersCallbackI = BendersCallbackT<IloCplex::UserCutCallbackI>;
 
 // =====================================================================
-//  BENDERS SOLVER
+//  BENDERS
 // =====================================================================
 
 class TSCFLSolverBenders
@@ -232,7 +229,7 @@ public:
     // lb   = melhor limite inferior
     // ub   = melhor solução viável
     // gap  = gap relativo entre lb e ub (do CPLEX)
-    // time = tempo total (segundos)
+    // time = tempo total de solve (s)
     double lb{0.0};
     double ub{0.0};
     double gap{0.0};
@@ -247,9 +244,9 @@ private:
 
     IloBoolVarArray a; // a_i  = abre planta i
     IloBoolVarArray b; // b_j  = abre depósito j
-    IloNumVar eta;     // variável para custo de segundo estágio
+    IloNumVar eta;     // custo de segundo estágio
 
-    WorkerDual worker; // subproblema dual (env próprio interno)
+    WorkerDual worker; // subproblema dual (env próprio)
 
 public:
     explicit TSCFLSolverBenders(const TSCFLInstance &inst_)
@@ -315,7 +312,6 @@ private:
 public:
     bool solve(bool log_output = true, double time_limit = -1.0)
     {
-        // LOG
         if (log_output)
         {
             cplex.setOut(env.out());
@@ -333,11 +329,11 @@ public:
         if (time_limit > 0.0)
             cplex.setParam(IloCplex::Param::TimeLimit, time_limit);
 
-        // Callbacks (lazy + user cuts) usando benders_common_main
-        cplex.use(new (env) LazyBendersCallbackI(env, inst, worker, a, b, eta, false));
-        cplex.use(new (env) UserBendersCallbackI(env, inst, worker, a, b, eta, true));
+        // Callbacks (lazy + user cut)
+        cplex.use(new (env) LazyBendersCallbackI(env, inst, worker, a, b, eta));
+        cplex.use(new (env) UserBendersCallbackI(env, inst, worker, a, b, eta));
 
-        // Solve com cronômetro externo
+        // Solve com cronômetro próprio (inclui tempo do worker)
         auto t0 = std::chrono::steady_clock::now();
         bool ok = cplex.solve();
         auto t1 = std::chrono::steady_clock::now();
@@ -361,7 +357,7 @@ public:
             std::cout << "status = " << status << "\n";
             std::cout << "gap    = " << gap << "\n";
             std::cout << "nodes  = " << nodes << "\n";
-            std::cout << "time   = " << time << "s\n";
+            std::cout << "time   = " << time << " s\n";
             std::cout << "eta*   = " << cplex.getValue(eta) << "\n";
         }
         else
