@@ -21,11 +21,11 @@ class TSCFLSolverCplex
 public:
     const TSCFLInstance &inst;
 
-    // Resultados do solve
-    double obj_value{0.0};
-    double best_bound{0.0};
-    double mip_gap{0.0};
-    double solve_time{0.0};
+    // Parâmetros de resultados do solver
+    double lb{0.0};
+    double ub{0.0};
+    double gap{0.0};
+    double time{0.0};
     IloInt64 nodes{0};
     IloAlgorithm::Status status{IloAlgorithm::Unknown};
 
@@ -60,9 +60,9 @@ public:
 
     ~TSCFLSolverCplex()
     {
-        env.end();
         cplex.end();
         model.end();
+        env.end();
     }
 
 private:
@@ -165,41 +165,38 @@ public:
         }
 
         // Parâmetros
-        cplex.setParam(IloCplex::Param::MIP::Tolerances::MIPGap, 1.0e-6);
+        cplex.setParam(IloCplex::Param::MIP::Tolerances::MIPGap, MIP_GAP);
 
         if (time_limit > 0.0)
             cplex.setParam(IloCplex::Param::TimeLimit, time_limit);
-
-        // Benders
-        cplex.setParam(IloCplex::Param::Benders::Strategy, IloCplex::BendersFull);
 
         // Solve
         bool ok = cplex.solve();
         status = cplex.getStatus();
 
         // Estatísticas
-        mip_gap = cplex.getMIPRelativeGap();
-        solve_time = cplex.getTime();
+        gap = cplex.getMIPRelativeGap();
+        time = cplex.getTime();
         nodes = cplex.getNnodes64();
 
         if (ok)
         {
-            obj_value = cplex.getObjValue();
-            best_bound = cplex.getBestObjValue();
+            ub = cplex.getObjValue();
+            lb = cplex.getBestObjValue();
 
             std::cout << "\n[CPLEX] Solved.\n";
-            std::cout << "objective    = " << obj_value << "\n";
-            std::cout << "best bound   = " << best_bound << "\n";
-            std::cout << "CPLEX status = " << status << "\n";
-            std::cout << "MIP gap      = " << mip_gap << "\n";
-            std::cout << "Nodes        = " << nodes << "\n";
-            std::cout << "Time         = " << solve_time << " s\n";
+            std::cout << "UB     = " << ub << "\n";
+            std::cout << "LB     = " << lb << "\n";
+            std::cout << "status = " << status << "\n";
+            std::cout << "gap    = " << gap << "\n";
+            std::cout << "nodes  = " << nodes << "\n";
+            std::cout << "time   = " << time << "s\n";
         }
         else
         {
-            std::cerr << "\n[CPLEX] No solution. Status = " << status << "\n";
-            std::cerr << "nodes      = " << nodes << "\n";
-            std::cerr << "Solve time = " << solve_time << " s\n";
+            std::cerr << "\n[CPLEX] No solution. status = " << status << "\n";
+            std::cerr << "nodes = " << nodes << "\n";
+            std::cerr << "time  = " << time << " s\n";
         }
 
         return ok;
