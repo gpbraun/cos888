@@ -1,17 +1,7 @@
 /*
 COS888
 
-Classe base abstrata para os "workers" de Benders no TSCFL.
-
-Cada Worker:
-- recebe (a, b) fixos (decisões de 1º estágio),
-- resolve um subproblema (dual, primal, rede, ...),
-- devolve os coeficientes do corte de Benders:
-
-    theta  = valor ótimo do subproblema
-    coef_a = coeficientes de a_i
-    coef_b = coeficientes de b_j
-    rhs    = termo independente
+Classe base abstrata para os Workers de Benders no TSCFL.
 
 Gabriel Braun, 2025
 */
@@ -23,12 +13,10 @@ Gabriel Braun, 2025
 class Worker
 {
 public:
-    // Mantemos uma referência constante para a instância do problema.
     const TSCFLInstance &inst;
 
     explicit Worker(const TSCFLInstance &inst_) : inst(inst_) {}
 
-    // Precisamos de um destrutor virtual para polimorfismo.
     virtual ~Worker() = default;
 
     // Interface comum a todos os Workers.

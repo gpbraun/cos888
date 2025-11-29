@@ -200,11 +200,10 @@ public:
           eta(env, 0.0, IloInfinity, ILOFLOAT),
           worker(nullptr)
     {
-        // Escolhe o worker de acordo com o modo
         switch (mode)
         {
         case 0:
-            worker.reset(new WorkerDual(inst_));
+            worker = std::make_unique<WorkerDual>(inst_);
             break;
         case 1:
             throw std::invalid_argument("WorkerPrimal não implementado!");
@@ -221,7 +220,7 @@ public:
         build_master();
         cplex.extract(master);
 
-        // Benders com callbacks precisa de Traditional search
+        // Benders com callbacks precisa de "Traditional"  search
         cplex.setParam(IloCplex::Param::MIP::Strategy::Search, IloCplex::Traditional);
         cplex.setParam(IloCplex::Param::Threads, 0);
     }
@@ -288,7 +287,7 @@ public:
         if (time_limit > 0.0)
             cplex.setParam(IloCplex::Param::TimeLimit, time_limit);
 
-        // Callbacks (lazy + user cuts) usando o Worker genérico
+        // Callbacks
         cplex.use(new (env) LazyBendersCallbackI(env, inst, *worker, a, b, eta));
         cplex.use(new (env) UserBendersCallbackI(env, inst, *worker, a, b, eta));
 
