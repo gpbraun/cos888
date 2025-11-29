@@ -24,7 +24,7 @@ Gabriel Braun, 2025
 ILOSTLBEGIN
 
 // =====================================================================
-//  CALLBACKS (Lazy + User cuts)
+//  CALLBACK: Lazy Constraints
 // =====================================================================
 
 class LazyBendersCallbackI : public IloCplex::LazyConstraintCallbackI
@@ -35,20 +35,24 @@ class LazyBendersCallbackI : public IloCplex::LazyConstraintCallbackI
     IloBoolVarArray b;
     IloNumVar eta;
 
+    IloNumArray a_vals;
+    IloNumArray b_vals;
+
 public:
     LazyBendersCallbackI(
-        IloEnv env,
         const TSCFLInstance &inst_,
         Worker &worker_,
         IloBoolVarArray a_,
         IloBoolVarArray b_,
         IloNumVar eta_)
-        : IloCplex::LazyConstraintCallbackI(env),
+        : IloCplex::LazyConstraintCallbackI(inst_.env),
           inst(inst_),
           worker(worker_),
           a(a_),
           b(b_),
-          eta(eta_)
+          eta(eta_),
+          a_vals(inst_.env, inst_.nI),
+          b_vals(inst_.env, inst_.nJ)
     {
     }
 
@@ -59,36 +63,25 @@ public:
 
     void main() override
     {
-        // 1) Lê (a,b,eta) da solução corrente
-        Vec av(inst.nI), bv(inst.nJ);
-        for (int i = 0; i < inst.nI; ++i)
-            av[i] = getValue(a[i]);
-        for (int j = 0; j < inst.nJ; ++j)
-            bv[j] = getValue(b[j]);
+        // 1) Lê (a, b) da solução corrente de uma vez
+        getValues(a_vals, a);
+        getValues(b_vals, b);
         double eta_val = getValue(eta);
 
         // 2) Resolve worker
-        double theta, rhs;
-        Vec coef_a, coef_b;
-        worker.solve(av, bv, theta, coef_a, coef_b, rhs);
+        worker.solve(a_vals, b_vals);
 
-        // 3) Se corte violado, adiciona
-        if (theta - eta_val > EPS)
-        {
-            IloEnv env = getEnv();
-            IloExpr lin(env);
+        // 3) Se corte violado, adiciona lazy cut
+        if (!(worker.theta - eta_val > EPS))
+            return;
 
-            lin += rhs;
-            for (int i = 0; i < inst.nI; ++i)
-                lin += coef_a[i] * a[i];
-            for (int j = 0; j < inst.nJ; ++j)
-                lin += coef_b[j] * b[j];
-
-            add(eta >= lin);
-            lin.end();
-        }
+        add(eta >= worker.rhs + IloScalProd(worker.coef_a, a) + IloScalProd(worker.coef_b, b));
     }
 };
+
+// =====================================================================
+//  CALLBACK: User Cuts
+// =====================================================================
 
 class UserBendersCallbackI : public IloCplex::UserCutCallbackI
 {
@@ -98,20 +91,24 @@ class UserBendersCallbackI : public IloCplex::UserCutCallbackI
     IloBoolVarArray b;
     IloNumVar eta;
 
+    IloNumArray a_vals;
+    IloNumArray b_vals;
+
 public:
     UserBendersCallbackI(
-        IloEnv env,
         const TSCFLInstance &inst_,
         Worker &worker_,
         IloBoolVarArray a_,
         IloBoolVarArray b_,
         IloNumVar eta_)
-        : IloCplex::UserCutCallbackI(env),
+        : IloCplex::UserCutCallbackI(inst_.env),
           inst(inst_),
           worker(worker_),
           a(a_),
           b(b_),
-          eta(eta_)
+          eta(eta_),
+          a_vals(inst_.env, inst_.nI),
+          b_vals(inst_.env, inst_.nJ)
     {
     }
 
@@ -125,39 +122,25 @@ public:
         if (!isAfterCutLoop())
             return;
 
-        // 1) Lê (a,b,eta) da solução corrente
-        Vec av(inst.nI), bv(inst.nJ);
-        for (int i = 0; i < inst.nI; ++i)
-            av[i] = getValue(a[i]);
-        for (int j = 0; j < inst.nJ; ++j)
-            bv[j] = getValue(b[j]);
+        // 1) Lê (a, b, eta) da solução LP
+        getValues(a_vals, a);
+        getValues(b_vals, b);
         double eta_val = getValue(eta);
 
         // 2) Resolve worker
-        double theta, rhs;
-        Vec coef_a, coef_b;
-        worker.solve(av, bv, theta, coef_a, coef_b, rhs);
+        worker.solve(a_vals, b_vals);
 
-        // 3) Se corte violado, adiciona
-        if (theta - eta_val > EPS)
-        {
-            IloEnv env = getEnv();
-            IloExpr lin(env);
+        // 3) Se corte violado, adiciona user cut
+        if (!(worker.theta - eta_val > EPS))
+            return;
 
-            lin += rhs;
-            for (int i = 0; i < inst.nI; ++i)
-                lin += coef_a[i] * a[i];
-            for (int j = 0; j < inst.nJ; ++j)
-                lin += coef_b[j] * b[j];
-
-            add(eta >= lin, IloCplex::UseCutPurge);
-            lin.end();
-        }
+        add(eta >= worker.rhs + IloScalProd(worker.coef_a, a) + IloScalProd(worker.coef_b, b),
+            IloCplex::UseCutPurge);
     }
 };
 
 // =====================================================================
-//  BENDERS
+//  SOLVER TSCFL: Benders Decomposition
 // =====================================================================
 
 class TSCFLSolverBenders
@@ -174,7 +157,6 @@ public:
     IloAlgorithm::Status status{IloAlgorithm::Unknown};
 
 private:
-    IloEnv env;
     IloModel master;
     IloCplex cplex;
 
@@ -191,14 +173,20 @@ public:
     // 2 -> WorkerNet
     explicit TSCFLSolverBenders(const TSCFLInstance &inst_, int mode = 0)
         : inst(inst_),
-          env(),
-          master(env),
-          cplex(env),
-          a(env, inst_.nI),
-          b(env, inst_.nJ),
-          eta(env, 0.0, IloInfinity, ILOFLOAT),
+          master(inst_.env),
+          cplex(inst_.env),
+          a(inst_.env, inst_.nI),
+          b(inst_.env, inst_.nJ),
+          eta(inst_.env, 0.0, IloInfinity, ILOFLOAT),
           worker(nullptr)
     {
+        build_master();
+        cplex.extract(master);
+
+        // Parâmetros CPLEX (mestre)
+        cplex.setParam(IloCplex::Param::Threads, 1);
+        cplex.setParam(IloCplex::Param::MIP::Strategy::Search, IloCplex::Traditional);
+
         switch (mode)
         {
         case 0:
@@ -209,66 +197,38 @@ public:
             break;
         case 2:
             throw std::invalid_argument("WorkerNet não implementado!");
-            // worker = std::make_unique<WorkerNet>(inst_);
-            // break;
         default:
             throw std::invalid_argument("Invalid Benders worker mode (must be 0, 1, or 2).");
         }
-
-        build_master();
-        cplex.extract(master);
-
-        // Parâmetros CPLEX
-        cplex.setParam(IloCplex::Param::Threads, 0);
-        cplex.setParam(IloCplex::Param::MIP::Tolerances::MIPGap, MIP_GAP);
-        cplex.setParam(IloCplex::Param::MIP::Strategy::Search, IloCplex::Traditional);
     }
 
     ~TSCFLSolverBenders()
     {
         cplex.end();
         master.end();
-        env.end();
     }
 
 private:
     void build_master()
     {
-        const int nI = inst.nI;
-        const int nJ = inst.nJ;
+        IloEnv &env = inst.env;
 
         // Capacidade agregada (garante viabilidade do subproblema)
-        {
-            IloExpr e1(env), e2(env);
-            double demand_total = std::accumulate(inst.r.begin(), inst.r.end(), 0.0);
-
-            for (int i = 0; i < nI; ++i)
-                e1 += inst.p[i] * a[i];
-            for (int j = 0; j < nJ; ++j)
-                e2 += inst.q[j] * b[j];
-
-            master.add(e1 >= demand_total);
-            master.add(e2 >= demand_total);
-            e1.end();
-            e2.end();
-        }
+        double demand_total = IloSum(inst.r);
+        master.add(IloScalProd(inst.p, a) >= demand_total);
+        master.add(IloScalProd(inst.q, b) >= demand_total);
 
         // OBJETIVO: custo fixo + eta
-        {
-            IloExpr obj(env);
-            for (int i = 0; i < nI; ++i)
-                obj += inst.f[i] * a[i];
-            for (int j = 0; j < nJ; ++j)
-                obj += inst.g[j] * b[j];
-            obj += eta;
-            master.add(IloMinimize(env, obj));
-            obj.end();
-        }
+        IloObjective obj =
+            IloMinimize(env, IloScalProd(inst.f, a) + IloScalProd(inst.g, b) + eta);
+        master.add(obj);
     }
 
 public:
     bool solve(bool log_output = true, double time_limit = -1.0)
     {
+        IloEnv &env = inst.env;
+
         if (log_output)
         {
             cplex.setOut(env.out());
@@ -280,12 +240,15 @@ public:
             cplex.setWarning(env.getNullStream());
         }
 
+        // Parâmetros
+        cplex.setParam(IloCplex::Param::MIP::Tolerances::MIPGap, MIP_GAP);
+
         if (time_limit > 0.0)
             cplex.setParam(IloCplex::Param::TimeLimit, time_limit);
 
-        // Callbacks
-        cplex.use(new (env) LazyBendersCallbackI(env, inst, *worker, a, b, eta));
-        cplex.use(new (env) UserBendersCallbackI(env, inst, *worker, a, b, eta));
+        // Callbacks Benders
+        cplex.use(new (env) LazyBendersCallbackI(inst, *worker, a, b, eta));
+        cplex.use(new (env) UserBendersCallbackI(inst, *worker, a, b, eta));
 
         // Solve
         auto t0 = std::chrono::steady_clock::now();

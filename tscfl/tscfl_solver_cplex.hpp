@@ -16,6 +16,7 @@ Gabriel Braun, 2025
 
 ILOSTLBEGIN
 
+// SOLVER TSCFL: CPLEX
 class TSCFLSolverCplex
 {
 public:
@@ -30,29 +31,23 @@ public:
     IloAlgorithm::Status status{IloAlgorithm::Unknown};
 
 private:
-    IloEnv env;
     IloModel model;
     IloCplex cplex;
 
     IloBoolVarArray a; // a_i  = abre planta i
     IloBoolVarArray b; // b_j  = abre depósito j
-    IloNumVarArray x;  // x_ij = fluxo planta i -> depósito j
-    IloNumVarArray y;  // y_jk = fluxo depósito j -> cliente k
-
-    // Acessores para variáveis de fluxo.
-    inline IloNumVar &X(int i, int j) { return x[idx2(i, j, inst.nJ)]; }
-    inline IloNumVar &Y(int j, int k) { return y[idx2(j, k, inst.nK)]; }
+    IloNumVarMatrix x; // x_ij = fluxo planta i -> depósito j
+    IloNumVarMatrix y; // y_jk = fluxo depósito j -> cliente k
 
 public:
     explicit TSCFLSolverCplex(const TSCFLInstance &inst_)
         : inst(inst_),
-          env(),
-          model(env),
-          cplex(env),
-          a(env, inst_.nI),
-          b(env, inst_.nJ),
-          x(env, inst_.nI * inst_.nJ, 0.0, IloInfinity, ILOFLOAT),
-          y(env, inst_.nJ * inst_.nK, 0.0, IloInfinity, ILOFLOAT)
+          model(inst_.env),
+          cplex(inst_.env),
+          a(inst_.env, inst_.nI),
+          b(inst_.env, inst_.nJ),
+          x(inst_.env, inst_.nI, inst_.nJ),
+          y(inst_.env, inst_.nJ, inst_.nK)
     {
         build_model();
         cplex.extract(model);
@@ -68,96 +63,56 @@ public:
     {
         cplex.end();
         model.end();
-        env.end();
     }
 
 private:
     void build_model()
     {
-        const int nI = inst.nI;
-        const int nJ = inst.nJ;
-        const int nK = inst.nK;
+        IloEnv env = inst.env;
 
         // RESTRIÇÕES
         // Capacidade das plantas
-        for (int i = 0; i < nI; ++i)
-        {
-            IloExpr expr(env);
-            for (int j = 0; j < nJ; ++j)
-                expr += X(i, j);
-            model.add(expr <= inst.p[i] * a[i]);
-            expr.end();
-        }
+        for (int i = 0; i < inst.nI; ++i)
+            model.add(IloSum(x[i]) <= inst.p[i] * a[i]);
 
         // Capacidade dos depósitos
-        for (int j = 0; j < nJ; ++j)
-        {
-            IloExpr expr(env);
-            for (int k = 0; k < nK; ++k)
-                expr += Y(j, k);
-            model.add(expr <= inst.q[j] * b[j]);
-            expr.end();
-        }
+        for (int j = 0; j < inst.nJ; ++j)
+            model.add(IloSum(y[j]) <= inst.q[j] * b[j]);
 
         // Balanço nos depósitos
-        for (int j = 0; j < nJ; ++j)
-        {
-            IloExpr expr(env);
-            for (int i = 0; i < nI; ++i)
-                expr += X(i, j);
-            for (int k = 0; k < nK; ++k)
-                expr -= Y(j, k);
-            model.add(expr == 0.0);
-            expr.end();
-        }
+        for (int j = 0; j < inst.nJ; ++j)
+            model.add(IloSum(x.col(j)) - IloSum(y[j]) == 0.0);
 
         // Demanda dos clientes
-        for (int k = 0; k < nK; ++k)
-        {
-            IloExpr expr(env);
-            for (int j = 0; j < nJ; ++j)
-                expr += Y(j, k);
-            model.add(expr == inst.r[k]);
-            expr.end();
-        }
+        for (int k = 0; k < inst.nK; ++k)
+            model.add(IloSum(y.col(k)) == inst.r[k]);
 
         // Capacidade agregada (viabilidade extra)
-        for (int i = 0; i < nI; ++i)
-            for (int j = 0; j < nJ; ++j)
-                model.add(X(i, j) <= inst.q[j] * b[j]);
+        for (int i = 0; i < inst.nI; ++i)
+            for (int j = 0; j < inst.nJ; ++j)
+                model.add(x[i][j] <= inst.q[j] * b[j]);
 
-        for (int j = 0; j < nJ; ++j)
-            for (int k = 0; k < nK; ++k)
-                model.add(Y(j, k) <= inst.r[k] * b[j]);
+        for (int j = 0; j < inst.nJ; ++j)
+            for (int k = 0; k < inst.nK; ++k)
+                model.add(y[j][k] <= inst.r[k] * b[j]);
 
         // FUNÇÃO OBJETIVO
-        IloExpr obj(env);
+        IloExpr obj_expr(env);
+        // Custos fixos
+        obj_expr += IloScalProd(inst.f, a) + IloScalProd(inst.g, b);
+        // Custos de fluxo
+        obj_expr += IloMatProd(inst.c, x) + IloMatProd(inst.d, y);
 
-        // Custos fixos plantas
-        for (int i = 0; i < nI; ++i)
-            obj += inst.f[i] * a[i];
-
-        // Custos fixos depósitos
-        for (int j = 0; j < nJ; ++j)
-            obj += inst.g[j] * b[j];
-
-        // Custos de fluxo planta -> depósito
-        for (int i = 0; i < nI; ++i)
-            for (int j = 0; j < nJ; ++j)
-                obj += inst.C(i, j) * X(i, j);
-
-        // Custos de fluxo depósito -> cliente
-        for (int j = 0; j < nJ; ++j)
-            for (int k = 0; k < nK; ++k)
-                obj += inst.D(j, k) * Y(j, k);
-
-        model.add(IloMinimize(env, obj));
-        obj.end();
+        IloObjective obj = IloMinimize(env, obj_expr);
+        model.add(obj);
+        obj_expr.end();
     }
 
 public:
     bool solve(bool log_output = true, double time_limit = -1.0)
     {
+        IloEnv env = inst.env;
+
         // Controle de log
         if (log_output)
         {
@@ -179,8 +134,8 @@ public:
 
         // Estatísticas
         gap = cplex.getMIPRelativeGap();
-        time = cplex.getTime();
         nodes = cplex.getNnodes64();
+        time = cplex.getTime();
 
         if (ok)
         {

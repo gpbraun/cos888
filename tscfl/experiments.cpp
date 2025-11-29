@@ -14,25 +14,34 @@ Gabriel Braun, 2025
 
 int main()
 {
-    const std::string path = "_instances/fernandes/tscfl_050_100_200_b.txt";
+    const std::string path = "_instances/fernandes/tscfl_050_100_200_a.txt";
+
+    IloEnv env;
+    int status = 0;
 
     try
     {
-        TSCFLInstance inst = TSCFLInstance::from_txt(path);
+        TSCFLInstance inst = TSCFLInstance::from_txt(env, path);
 
         // 0. CPLEX MP
         // TSCFLSolverCplex solver_cplex(inst);
         // solver_cplex.solve(true, 200.0);
 
-        // 1. Benders
+        // 1. BENDERS
         TSCFLSolverBenders solver_benders(inst, 1);
-        solver_benders.solve(true, 1000.0);
+        solver_benders.solve(true, 200.0);
+    }
+    catch (const IloException &e)
+    {
+        std::cerr << "CPLEX Error: " << e.getMessage() << "\n";
+        status = 1;
     }
     catch (const std::exception &e)
     {
         std::cerr << "Error: " << e.what() << "\n";
-        return 1;
+        status = 1;
     }
 
-    return 0;
+    env.end();
+    return status;
 }

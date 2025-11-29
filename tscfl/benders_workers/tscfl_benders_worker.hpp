@@ -8,34 +8,38 @@ Gabriel Braun, 2025
 
 #pragma once
 
+#include <ilcplex/ilocplex.h>
+
 #include "tscfl_instance.hpp"
+
+ILOSTLBEGIN
 
 class Worker
 {
 public:
+    IloEnv env;
     const TSCFLInstance &inst;
 
-    explicit Worker(const TSCFLInstance &inst_) : inst(inst_) {}
+    // Saída do subproblema
+    double theta{0.0};  // valor ótimo do subproblema
+    double rhs{0.0};    // termo independente do corte
+    IloNumArray coef_a; // coeficientes multiplicando a_i (no env do mestre)
+    IloNumArray coef_b; // coeficientes multiplicando b_j
 
-    virtual ~Worker() = default;
+    explicit Worker(const TSCFLInstance &inst_)
+        : env(),
+          inst(inst_),
+          coef_a(inst_.env, inst_.nI),
+          coef_b(inst_.env, inst_.nJ)
+    {
+    }
 
-    // Interface comum a todos os Workers.
-    // Dado (a, b), resolve o subproblema e monta o corte:
-    //
-    //   theta  = valor ótimo do subproblema (2º estágio)
-    //   coef_a = coeficientes multiplicando a_i
-    //   coef_b = coeficientes multiplicando b_j
-    //   rhs    = termo independente
-    //
-    // O corte fica sempre no formato:
-    //
-    //   eta >= rhs + sum_i coef_a[i] * a_i + sum_j coef_b[j] * b_j
-    //
-    virtual void solve(
-        const Vec &a,
-        const Vec &b,
-        double &theta,
-        Vec &coef_a,
-        Vec &coef_b,
-        double &rhs) = 0;
+    virtual ~Worker()
+    {
+        env.end();
+    }
+
+    // Dado (a_vals, b_vals) da solução atual do mestre, resolve o subproblema.
+    // Atualiza: theta, rhs, coef_a, coef_b
+    virtual void solve(const IloNumArray &a_vals, const IloNumArray &b_vals) = 0;
 };
