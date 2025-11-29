@@ -56,6 +56,12 @@ public:
     {
         build_model();
         cplex.extract(model);
+
+        // Parâmetros CPLEX
+        cplex.setParam(IloCplex::Param::Threads, 1);
+        cplex.setParam(IloCplex::Param::Preprocessing::Reduce, 0);
+        cplex.setParam(IloCplex::Param::MIP::Tolerances::MIPGap, MIP_GAP);
+        cplex.setParam(IloCplex::Param::Benders::Strategy, IloCplex::BendersFull);
     }
 
     ~TSCFLSolverCplex()
@@ -163,10 +169,6 @@ public:
             cplex.setOut(env.getNullStream());
             cplex.setWarning(env.getNullStream());
         }
-
-        // Parâmetros
-        cplex.setParam(IloCplex::Param::MIP::Tolerances::MIPGap, MIP_GAP);
-        cplex.setParam(IloCplex::Param::Benders::Strategy, IloCplex::BendersFull);
 
         if (time_limit > 0.0)
             cplex.setParam(IloCplex::Param::TimeLimit, time_limit);

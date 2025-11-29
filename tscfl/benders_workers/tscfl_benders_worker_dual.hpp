@@ -64,8 +64,11 @@ public:
         model.add(obj);
         cplex.extract(model);
 
-        // Worker dual: LP, 1 thread (seguro para callbacks)
+        // Parâmetros do CPLEX
         cplex.setParam(IloCplex::Param::Threads, 1);
+        cplex.setParam(IloCplex::Param::Preprocessing::Reduce, 0);
+        cplex.setParam(IloCplex::Param::MIP::Tolerances::MIPGap, MIP_GAP);
+        cplex.setParam(IloCplex::Param::RootAlgorithm, IloCplex::Primal);
 
         if (log_output)
         {

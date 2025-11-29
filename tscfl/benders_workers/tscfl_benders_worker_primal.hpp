@@ -143,9 +143,9 @@ public:
 
         cplex.extract(model);
 
-        // LP puro, 1 thread, primal simplex e sem grandes reduções de presolve
+        // Parâmetros do CPLEX
         cplex.setParam(IloCplex::Param::Threads, 1);
-        cplex.setParam(IloCplex::Param::RootAlgorithm, IloCplex::Primal);
+        cplex.setParam(IloCplex::Param::RootAlgorithm, IloCplex::Dual);
         cplex.setParam(IloCplex::Param::Preprocessing::Reduce, 0);
 
         if (log_output)

@@ -122,6 +122,9 @@ public:
 
     void main() override
     {
+        if (!isAfterCutLoop())
+            return;
+
         // 1) Lê (a,b,eta) da solução corrente
         Vec av(inst.nI), bv(inst.nJ);
         for (int i = 0; i < inst.nI; ++i)
@@ -215,9 +218,10 @@ public:
         build_master();
         cplex.extract(master);
 
-        // Benders com callbacks precisa de "Traditional" search
-        cplex.setParam(IloCplex::Param::MIP::Strategy::Search, IloCplex::Traditional);
+        // Parâmetros CPLEX
         cplex.setParam(IloCplex::Param::Threads, 0);
+        cplex.setParam(IloCplex::Param::MIP::Tolerances::MIPGap, MIP_GAP);
+        cplex.setParam(IloCplex::Param::MIP::Strategy::Search, IloCplex::Traditional);
     }
 
     ~TSCFLSolverBenders()
@@ -275,9 +279,6 @@ public:
             cplex.setOut(env.getNullStream());
             cplex.setWarning(env.getNullStream());
         }
-
-        // Parâmetros
-        cplex.setParam(IloCplex::Param::MIP::Tolerances::MIPGap, MIP_GAP);
 
         if (time_limit > 0.0)
             cplex.setParam(IloCplex::Param::TimeLimit, time_limit);
