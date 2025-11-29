@@ -20,9 +20,11 @@ int main()
     {
         TSCFLInstance inst = TSCFLInstance::from_txt(path);
 
+        // 0. CPLEX MP
         // TSCFLSolverCplex solver_cplex(inst);
-        TSCFLSolverBenders solver_benders(inst);
 
+        // 1. Benders
+        TSCFLSolverBenders solver_benders(inst);
         solver_benders.solve(true, 600.0);
     }
     catch (const std::exception &e)
