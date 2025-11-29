@@ -18,7 +18,7 @@ Gabriel Braun, 2025
 
 #include "tscfl_instance.hpp"
 #include "benders_workers/tscfl_benders_worker_dual.hpp"
-// #include "benders_workers/tscfl_benders_worker_primal.hpp"
+#include "benders_workers/tscfl_benders_worker_primal.hpp"
 // #include "benders_workers/tscfl_benders_worker_net.hpp"
 
 ILOSTLBEGIN
@@ -163,10 +163,6 @@ public:
     const TSCFLInstance &inst;
 
     // Resultados:
-    // lb   = melhor limite inferior
-    // ub   = melhor solução viável
-    // gap  = gap relativo entre lb e ub (do CPLEX)
-    // time = tempo total de solve (segundos)
     double lb{0.0};
     double ub{0.0};
     double gap{0.0};
@@ -206,9 +202,8 @@ public:
             worker = std::make_unique<WorkerDual>(inst_);
             break;
         case 1:
-            throw std::invalid_argument("WorkerPrimal não implementado!");
-            // worker = std::make_unique<WorkerPrimal>(inst_);
-            // break;
+            worker = std::make_unique<WorkerPrimal>(inst_);
+            break;
         case 2:
             throw std::invalid_argument("WorkerNet não implementado!");
             // worker = std::make_unique<WorkerNet>(inst_);
@@ -220,7 +215,7 @@ public:
         build_master();
         cplex.extract(master);
 
-        // Benders com callbacks precisa de "Traditional"  search
+        // Benders com callbacks precisa de "Traditional" search
         cplex.setParam(IloCplex::Param::MIP::Strategy::Search, IloCplex::Traditional);
         cplex.setParam(IloCplex::Param::Threads, 0);
     }

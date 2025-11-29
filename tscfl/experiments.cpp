@@ -14,7 +14,7 @@ Gabriel Braun, 2025
 
 int main()
 {
-    const std::string path = "_instances/fernandes/tscfl_050_100_200_a.txt";
+    const std::string path = "_instances/fernandes/tscfl_050_100_200_c.txt";
 
     try
     {
@@ -22,10 +22,11 @@ int main()
 
         // 0. CPLEX MP
         // TSCFLSolverCplex solver_cplex(inst);
+        // solver_cplex.solve(true, 200.0);
 
         // 1. Benders
-        TSCFLSolverBenders solver_benders(inst);
-        solver_benders.solve(true, 600.0);
+        TSCFLSolverBenders solver_benders(inst, 0);
+        solver_benders.solve(true, 1000.0);
     }
     catch (const std::exception &e)
     {

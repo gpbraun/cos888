@@ -166,6 +166,7 @@ public:
 
         // Parâmetros
         cplex.setParam(IloCplex::Param::MIP::Tolerances::MIPGap, MIP_GAP);
+        cplex.setParam(IloCplex::Param::Benders::Strategy, IloCplex::BendersFull);
 
         if (time_limit > 0.0)
             cplex.setParam(IloCplex::Param::TimeLimit, time_limit);
