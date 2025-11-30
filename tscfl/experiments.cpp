@@ -12,10 +12,11 @@ Gabriel Braun, 2025
 #include "tscfl_solver_cplex.hpp"
 #include "tscfl_solver_benders.hpp"
 #include "tscfl_solver_cg.hpp"
+#include "tscfl_solver_rc.hpp"
 
 int main()
 {
-    const std::string path = "_instances/fernandes/tscfl_050_100_200_c.txt";
+    const std::string path = "_instances/fernandes/tscfl_050_100_200_a.txt";
 
     IloEnv env;
     int status = 0;
@@ -29,8 +30,12 @@ int main()
         // solver_cplex.solve(true, 200.0);
 
         // 1. COLUNAS
-        TSCFLSolverColumnGeneration solver_benders(inst);
-        solver_benders.solve(true, 100.0);
+        // TSCFLSolverColumnGeneration solver_cg(inst);
+        // solver_cg.solve(true, 100.0);
+
+        // 2. RELAX-AND-CUT
+        TSCFLSolverRelaxAndCut solver_rc(inst, 2);
+        solver_rc.solve(true, 100.0);
 
         // 3. BENDERS
         // TSCFLSolverBenders solver_benders(inst, 2);

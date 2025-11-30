@@ -1,8 +1,12 @@
 /*
 COS888
 
-Resolve a relaxação linear do TSCFL por geração de colunas
-(Dantzig–Wolfe por cliente).
+Relax-and-Cut para o TSCFL
+(Lagrangeano + subgradiente + heurística primal + cortes de fluxo).
+
+- NÃO usa CPLEX para resolver subproblemas.
+- Usa IloEnv apenas para IloNumArray / IloNumMatrix.
+- Heurística de segundo estágio usando Worker (Dual / Primal / Net).
 
 Gabriel Braun, 2025
 */
@@ -11,516 +15,858 @@ Gabriel Braun, 2025
 
 #include <ilcplex/ilocplex.h>
 #include <chrono>
-#include <iostream>
-#include <limits>
-#include <vector>
 #include <cmath>
+#include <iostream>
+#include <iomanip>
+#include <vector>
+#include <algorithm>
+#include <memory>
+#include <unordered_set>
 
 #include "tscfl_instance.hpp"
+#include "workers/tscfl_worker_dual.hpp"
+#include "workers/tscfl_worker_primal.hpp"
+#include "workers/tscfl_worker_net.hpp"
 
 ILOSTLBEGIN
 
-class TSCFLSolverColumnGeneration
+// =====================================================================
+//  CONSTANTES DO RELAX-AND-CUT
+// =====================================================================
+
+static const double EPSILON0 = 2.0;  // epsilon inicial (Polyak)
+static const int MAX_NO_IMPROV = 50; // iterações sem melhorar LB antes de reduzir epsilon
+static const int EXTRA_AGE = 5;      // vida extra de cortes em PA antes de ir pra CI
+
+static const int SOLVE_HEURISTIC_EVERY = 50; // frequência da heurística
+static const int MAX_NEW_CUTS_PER_ITER = 10; // máx. novos cortes por iteração
+static const int PRINT_EVERY = 10;           // frequência do log
+
+// =====================================================================
+//  SOLVER TSCFL: Relax-and-Cut
+// =====================================================================
+
+class TSCFLSolverRelaxAndCut
 {
 public:
     const TSCFLInstance &inst;
 
-    // Resultados:
-    double lb{-IloInfinity};   // LB da relaxação (LP)
-    double ub{IloInfinity};    // melhor primal viável (IP) via heurística
-    double lp_ub{IloInfinity}; // valor atual do RMP (UB p/ LP)
+    // Resultados globais
+    double lb{-IloInfinity};
+    double ub{IloInfinity};
     double gap{IloInfinity};
     double time{0.0};
     IloAlgorithm::Status status{IloAlgorithm::Unknown};
 
 private:
-    IloModel rmp;
-    IloCplex cplex;
-    IloObjective obj;
+    static constexpr double EPSILON0 = 2.0;          // epsilon inicial (Polyak)
+    static constexpr int MAX_NO_IMPROV = 50;         // iterações sem melhorar LB antes de reduzir epsilon
+    static constexpr int EXTRA_AGE = 2;              // vida extra de cortes em PA antes de ir pra CI
+    static constexpr int SOLVE_HEURISTIC_EVERY = 50; // frequência da heurística
+    static constexpr int MAX_NEW_CUTS_PER_ITER = 1;  // máx. novos cortes por iteração
+    static constexpr int PRINT_EVERY = 10;           // frequência do log
 
-    // Variáveis do RMP:
-    // a[i], b[j] são relaxadas (contínuas em [0,1]), mas mantemos a nomenclatura.
-    IloNumVarArray a; // a[i] = abre planta i (relaxado)
-    IloNumVarArray b; // b[j] = abre depósito j (relaxado)
+    IloEnv &env;
 
-    // z[k][t] = coluna t do cliente k (padrão planta–depósito).
-    std::vector<IloNumVarArray> z;
+    // Worker para subproblema de fluxo mínimo da heurística
+    std::unique_ptr<Worker> worker;
 
-    // Informações das colunas: para cada z[k][t], qual (i,j) ela representa?
-    struct ColumnInfo
+    // Demanda total
+    double total_demand{0.0};
+
+    // Parâmetro do subgradiente
+    double epsilon{EPSILON0};
+    int max_no_improv{MAX_NO_IMPROV};
+
+    // Multiplicadores de Lagrange
+    IloNumArray u;  // tamanho nI
+    IloNumArray v;  // tamanho nJ
+    IloNumArray gu; // subgradiente u[i]
+    IloNumArray gv; // subgradiente v[j]
+
+    // Solução lagrangeana corrente
+    IloNumArray a_lr;          // nI
+    IloNumArray b_lr;          // nJ
+    IloNumMatrix x_lr;         // nI x nJ
+    IloNumMatrix y_lr;         // nJ x nK
+    IloNumArray plant_flow_lr; // nI
+    IloNumArray depot_flow_lr; // nJ
+
+    // Melhor solução primal (para UB)
+    IloNumArray a_best; // nI
+    IloNumArray b_best; // nJ
+
+    // Custos adicionais de cortes
+    IloNumMatrix cut_cost_x; // nI x nJ
+    IloNumMatrix cut_cost_y; // nJ x nK
+    IloNumArray cut_fix_a;   // nI
+    IloNumArray cut_fix_b;   // nJ
+
+    // =================================================================
+    //  Estrutura de Flow Cover + conjuntos CA / PA / CI
+    // =================================================================
+    struct FlowCoverCut
     {
-        int i;
-        int j;
-    };
-    std::vector<std::vector<ColumnInfo>> col_info;
+        enum Type
+        {
+            PLANT,
+            DEPOT
+        } type;
+        int index; // i (PLANT) ou j (DEPOT)
 
-    // Restrições nomeadas pela variável dual associada:
-    IloRangeArray constr_l1; // capacidade das plantas (dual: l1)
-    IloRangeArray constr_l2; // capacidade dos depósitos (dual: l2)
-    IloRangeArray constr_m1; // balanço nos depósitos (NÃO usado no RMP DW)
-    IloRangeArray constr_m2; // demanda/convexidade dos clientes (dual: m2)
+        // Índices achatados:
+        //  x_ij → idx = i * nJ + j
+        //  y_jk → idx = j * nK + k
+        IloIntArray idx_x;
+        IloNumArray coef_x;
+        IloIntArray idx_y;
+        IloNumArray coef_y;
+
+        double coef_open; // coeficiente da_i ou b_j (tipicamente -p_i ou -q_j)
+        double rhs;
+
+        double lambda;    // multiplicador λ ≥ 0
+        double violation; // lhs - rhs na solução LR
+        int age;          // idade desde última violação
+
+        enum Status
+        {
+            CA,
+            PA,
+            CI
+        } status;
+
+        FlowCoverCut(IloEnv env_)
+            : type(PLANT),
+              index(-1),
+              idx_x(env_), coef_x(env_),
+              idx_y(env_), coef_y(env_),
+              coef_open(0.0), rhs(0.0),
+              lambda(0.0), violation(0.0), age(0),
+              status(CI)
+        {
+        }
+    };
+
+    std::vector<FlowCoverCut> cuts;
+    std::unordered_set<std::size_t> cut_hashes; // para evitar cortes duplicados
 
 public:
-    explicit TSCFLSolverColumnGeneration(const TSCFLInstance &inst_)
+    // mode (worker do subproblema de fluxo mínimo):
+    // 0 -> WorkerDual
+    // 1 -> WorkerPrimal
+    // 2 -> WorkerNet (default)
+    explicit TSCFLSolverRelaxAndCut(const TSCFLInstance &inst_, int mode = 2)
         : inst(inst_),
-          rmp(inst_.env),
-          cplex(inst_.env),
-          obj(inst_.env),
-          a(inst_.env, inst_.nI),
-          b(inst_.env, inst_.nJ),
-          constr_l1(inst_.env, inst_.nI),
-          constr_l2(inst_.env, inst_.nJ),
-          constr_m1(inst_.env), // não usado aqui
-          constr_m2(inst_.env, inst_.nK)
+          env(inst_.env),
+          worker(nullptr),
+          u(env, inst_.nI),
+          v(env, inst_.nJ),
+          gu(env, inst_.nI),
+          gv(env, inst_.nJ),
+          a_lr(env, inst_.nI),
+          b_lr(env, inst_.nJ),
+          x_lr(env, inst_.nI, inst_.nJ),
+          y_lr(env, inst_.nJ, inst_.nK),
+          plant_flow_lr(env, inst_.nI),
+          depot_flow_lr(env, inst_.nJ),
+          a_best(env, inst_.nI),
+          b_best(env, inst_.nJ),
+          cut_cost_x(env, inst_.nI, inst_.nJ),
+          cut_cost_y(env, inst_.nJ, inst_.nK),
+          cut_fix_a(env, inst_.nI),
+          cut_fix_b(env, inst_.nJ)
     {
-        IloEnv &env = inst.env;
+        total_demand = IloSum(inst_.r);
 
-        // Inicializa vetores de colunas (z) e infos
-        z.resize(inst.nK);
-        col_info.resize(inst.nK);
-        for (int k = 0; k < inst.nK; ++k)
+        switch (mode)
         {
-            z[k] = IloNumVarArray(env);
-            col_info[k] = std::vector<ColumnInfo>();
+        case 0:
+            worker = std::make_unique<WorkerDual>(inst_);
+            break;
+        case 1:
+            worker = std::make_unique<WorkerPrimal>(inst_);
+            break;
+        case 2:
+            worker = std::make_unique<WorkerNet>(inst_);
+            break;
+        default:
+            throw std::invalid_argument("Invalid Relax-and-Cut worker mode (must be 0, 1, or 2).");
         }
-
-        build_initial_rmp();
-        cplex.extract(rmp);
-
-        // Parâmetros CPLEX (LP):
-        cplex.setParam(IloCplex::Param::Threads, 1);
-        cplex.setParam(IloCplex::Param::Preprocessing::Reduce, 0);
-        // Qualquer algoritmo de LP raiz (primal/dual) serve bem:
-        // cplex.setParam(IloCplex::Param::RootAlgorithm, IloCplex::Primal);
     }
 
-    ~TSCFLSolverColumnGeneration()
-    {
-        cplex.end();
-        rmp.end();
-    }
+    ~TSCFLSolverRelaxAndCut() = default;
 
 private:
-    void build_initial_rmp()
+    // -----------------------------------------------------------------
+    // Helpers: hash de cortes (usa std::hash<int> + hash_combine)
+    // -----------------------------------------------------------------
+    static inline void hash_combine(std::size_t &seed, std::size_t value)
     {
-        IloEnv &env = inst.env;
-
-        // Objetivo
-        obj = IloMinimize(env, 0.0);
-        rmp.add(obj);
-
-        // Variáveis a[i] e b[j] relaxadas em [0,1]
-        for (int i = 0; i < inst.nI; ++i)
-            a[i] = IloNumVar(env, 0.0, 1.0, ILOFLOAT);
-        for (int j = 0; j < inst.nJ; ++j)
-            b[j] = IloNumVar(env, 0.0, 1.0, ILOFLOAT);
-
-        rmp.add(a);
-        rmp.add(b);
-
-        // Custos fixos
-        for (int i = 0; i < inst.nI; ++i)
-            obj.setLinearCoef(a[i], inst.f[i]);
-        for (int j = 0; j < inst.nJ; ++j)
-            obj.setLinearCoef(b[j], inst.g[j]);
-
-        // Restrição de capacidade das plantas: constr_l1[i]
-        for (int i = 0; i < inst.nI; ++i)
-        {
-            IloExpr e(env);
-            e -= inst.p[i] * a[i];
-            constr_l1[i] = (e <= 0.0);
-            rmp.add(constr_l1[i]);
-            e.end();
-        }
-
-        // Restrição de capacidade dos depósitos: constr_l2[j]
-        for (int j = 0; j < inst.nJ; ++j)
-        {
-            IloExpr e(env);
-            e -= inst.q[j] * b[j];
-            constr_l2[j] = (e <= 0.0);
-            rmp.add(constr_l2[j]);
-            e.end();
-        }
-
-        // Restrição de demanda/convexidade dos clientes: constr_m2[k]
-        for (int k = 0; k < inst.nK; ++k)
-        {
-            IloExpr e(env);
-            constr_m2[k] = (e == 1.0);
-            rmp.add(constr_m2[k]);
-            e.end();
-        }
-
-        // =====================================================================
-        //  Construir fluxo inicial f[i][j][k] capacidade-viável (guloso)
-        // =====================================================================
-
-        // flow[i][j][k]
-        std::vector<std::vector<std::vector<double>>> flow(
-            inst.nI,
-            std::vector<std::vector<double>>(inst.nJ,
-                                             std::vector<double>(inst.nK, 0.0)));
-
-        std::vector<double> plant_rem(inst.nI);
-        std::vector<double> depot_rem(inst.nJ);
-
-        double total_demand = 0.0;
-        double total_p = 0.0;
-        double total_q = 0.0;
-
-        for (int i = 0; i < inst.nI; ++i)
-        {
-            plant_rem[i] = inst.p[i];
-            total_p += inst.p[i];
-        }
-        for (int j = 0; j < inst.nJ; ++j)
-        {
-            depot_rem[j] = inst.q[j];
-            total_q += inst.q[j];
-        }
-        for (int k = 0; k < inst.nK; ++k)
-            total_demand += inst.r[k];
-
-        if (total_p + EPS < total_demand || total_q + EPS < total_demand)
-            throw std::runtime_error("Instância inviável: capacidade total < demanda total.");
-
-        // Para cada cliente, distribui demanda usando qualquer (i,j) com capacidade
-        for (int k = 0; k < inst.nK; ++k)
-        {
-            double R = inst.r[k];
-
-            while (R > EPS)
-            {
-                int best_i = -1;
-                int best_j = -1;
-                double best_cost = std::numeric_limits<double>::infinity();
-
-                // Escolhe um par (i,j) disponível (aqui uso o mais barato)
-                for (int i = 0; i < inst.nI; ++i)
-                {
-                    if (plant_rem[i] <= EPS)
-                        continue;
-
-                    for (int j = 0; j < inst.nJ; ++j)
-                    {
-                        if (depot_rem[j] <= EPS)
-                            continue;
-
-                        double c_ij = inst.c[i][j] + inst.d[j][k];
-                        if (c_ij < best_cost)
-                        {
-                            best_cost = c_ij;
-                            best_i = i;
-                            best_j = j;
-                        }
-                    }
-                }
-
-                if (best_i == -1 || best_j == -1)
-                {
-                    throw std::runtime_error(
-                        "Falha ao construir fluxo inicial: sem capacidade suficiente para atender cliente.");
-                }
-
-                double delta = std::min(R, std::min(plant_rem[best_i], depot_rem[best_j]));
-
-                flow[best_i][best_j][k] += delta;
-                R -= delta;
-                plant_rem[best_i] -= delta;
-                depot_rem[best_j] -= delta;
-            }
-        }
-
-        // =====================================================================
-        //  Criar colunas iniciais z[k][t] a partir de flow[i][j][k]
-        // =====================================================================
-        for (int k = 0; k < inst.nK; ++k)
-        {
-            for (int i = 0; i < inst.nI; ++i)
-            {
-                for (int j = 0; j < inst.nJ; ++j)
-                {
-                    if (flow[i][j][k] > EPS)
-                    {
-                        // Criar uma coluna z_{k,(i,j)}
-                        add_column_for_client(k, i, j);
-                    }
-                }
-            }
-
-            // Por segurança, garante que ao menos uma coluna foi criada para k
-            if (z[k].getSize() == 0)
-            {
-                // Isso só pode acontecer se r_k ~ 0; se quiser, pode pular
-                // ou criar uma coluna "dummy" aqui.
-                // Para simplicidade, vamos garantir pelo menos uma coluna qualquer.
-                int i0 = 0, j0 = 0;
-                add_column_for_client(k, i0, j0);
-            }
-        }
+        seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
     }
 
-    void add_column_for_client(int k, int i, int j)
+    std::size_t cut_hash(const FlowCoverCut &cut) const
     {
-        IloEnv &env = inst.env;
+        std::size_t seed = 0;
 
-        double rk = inst.r[k];
+        hash_combine(seed, std::hash<int>()(static_cast<int>(cut.type)));
+        hash_combine(seed, std::hash<int>()(cut.index));
 
-        // Custo do padrão (i,j) para o cliente k:
-        double cost = rk * (inst.c[i][j] + inst.d[j][k]);
-
-        // Coluna: adiciona coeficientes na função objetivo e nas restrições
-        IloNumColumn col = obj(cost);
-        col += constr_l1[i](rk);  // capacidade planta i
-        col += constr_l2[j](rk);  // capacidade depósito j
-        col += constr_m2[k](1.0); // convexidade/demanda do cliente k
-
-        IloNumVar z_var(col, 0.0, IloInfinity, ILOFLOAT);
-        z[k].add(z_var);
-        rmp.add(z_var);
-
-        col_info[k].push_back({i, j});
-    }
-
-    // Heurística primal: constrói (a,b,x,y) viáveis a partir de z e atualiza UB.
-    void run_heuristic_from_rmp()
-    {
-        IloEnv &env = inst.env;
-
-        // Reconstruir fluxos x[i][j] e y[j][k] a partir de z[k][t].
-        IloNumMatrix x(env, inst.nI, inst.nJ);
-        IloNumMatrix y(env, inst.nJ, inst.nK);
-
-        for (int i = 0; i < inst.nI; ++i)
-            for (int j = 0; j < inst.nJ; ++j)
-                x[i][j] = 0.0;
-
-        for (int j = 0; j < inst.nJ; ++j)
-            for (int k = 0; k < inst.nK; ++k)
-                y[j][k] = 0.0;
-
-        // Percorre z[k][t] e acumula fluxo = z_{k,t} * r_k
-        for (int k = 0; k < inst.nK; ++k)
+        if (cut.type == FlowCoverCut::PLANT)
         {
-            int ncols = z[k].getSize();
-            double rk = inst.r[k];
-
-            for (int t = 0; t < ncols; ++t)
-            {
-                double zval = cplex.getValue(z[k][t]);
-                if (zval <= EPS)
-                    continue;
-
-                int i = col_info[k][t].i;
-                int j = col_info[k][t].j;
-
-                double flow = zval * rk;
-                x[i][j] += flow;
-                y[j][k] += flow;
-            }
-        }
-
-        // Determina a[i] e b[j] inteiros a partir dos fluxos.
-        std::vector<double> a_heur(inst.nI, 0.0);
-        std::vector<double> b_heur(inst.nJ, 0.0);
-
-        for (int i = 0; i < inst.nI; ++i)
-        {
-            double total_out = 0.0;
-            for (int j = 0; j < inst.nJ; ++j)
-                total_out += x[i][j];
-            if (total_out > EPS)
-                a_heur[i] = 1.0;
-        }
-
-        for (int j = 0; j < inst.nJ; ++j)
-        {
-            double total_out = 0.0;
-            for (int k = 0; k < inst.nK; ++k)
-                total_out += y[j][k];
-            if (total_out > EPS)
-                b_heur[j] = 1.0;
-        }
-
-        // Calcula o custo da solução heurística.
-        double cost_fix = 0.0;
-        for (int i = 0; i < inst.nI; ++i)
-            cost_fix += inst.f[i] * a_heur[i];
-        for (int j = 0; j < inst.nJ; ++j)
-            cost_fix += inst.g[j] * b_heur[j];
-
-        double cost_flow = 0.0;
-        for (int i = 0; i < inst.nI; ++i)
-            for (int j = 0; j < inst.nJ; ++j)
-                cost_flow += inst.c[i][j] * x[i][j];
-        for (int j = 0; j < inst.nJ; ++j)
-            for (int k = 0; k < inst.nK; ++k)
-                cost_flow += inst.d[j][k] * y[j][k];
-
-        double ub_cand = cost_fix + cost_flow;
-
-        if (ub_cand + 1e-6 < ub)
-        {
-            ub = ub_cand;
-            // Se quiser, aqui poderíamos armazenar (a_heur, b_heur, x, y)
-            // em membros da classe para recuperar a melhor solução primal.
-        }
-    }
-
-public:
-    bool solve(bool log_output = true, double time_limit = -1.0)
-    {
-        IloEnv &env = inst.env;
-
-        // Controle de log
-        if (log_output)
-        {
-            cplex.setOut(env.out());
-            cplex.setWarning(env.out());
+            for (IloInt t = 0; t < cut.idx_x.getSize(); ++t)
+                hash_combine(seed, std::hash<int>()(cut.idx_x[t]));
         }
         else
         {
-            cplex.setOut(env.getNullStream());
-            cplex.setWarning(env.getNullStream());
+            for (IloInt t = 0; t < cut.idx_y.getSize(); ++t)
+                hash_combine(seed, std::hash<int>()(cut.idx_y[t]));
         }
 
-        const bool has_time_limit = (time_limit > 0.0);
-        auto t0 = std::chrono::steady_clock::now();
+        return seed;
+    }
 
-        bool converged = false;
-        double last_rmp_value = IloInfinity;
+    // -----------------------------------------------------------------
+    // Norma 2 ao quadrado do subgradiente (u, v, λ)
+    // -----------------------------------------------------------------
+    double norm2_squared() const
+    {
+        double s = 0.0;
+
+        for (int i = 0; i < inst.nI; ++i)
+            s += gu[i] * gu[i];
+
+        for (int j = 0; j < inst.nJ; ++j)
+            s += gv[j] * gv[j];
+
+        for (const auto &cut : cuts)
+        {
+            if (cut.status != FlowCoverCut::CI)
+                s += cut.violation * cut.violation;
+        }
+
+        return s;
+    }
+
+    // -----------------------------------------------------------------
+    // Constrói custos adicionais de cortes (a partir de λ)
+    // -----------------------------------------------------------------
+    void build_cut_costs()
+    {
+        const int nI = inst.nI;
+        const int nJ = inst.nJ;
+        const int nK = inst.nK;
+
+        // zera
+        for (int i = 0; i < nI; ++i)
+        {
+            cut_fix_a[i] = 0.0;
+            for (int j = 0; j < nJ; ++j)
+                cut_cost_x[i][j] = 0.0;
+        }
+        for (int j = 0; j < nJ; ++j)
+        {
+            cut_fix_b[j] = 0.0;
+            for (int k = 0; k < nK; ++k)
+                cut_cost_y[j][k] = 0.0;
+        }
+
+        // acumula contribuições de cortes ativos
+        for (const auto &cut : cuts)
+        {
+            if (cut.status == FlowCoverCut::CI || cut.lambda <= EPS)
+                continue;
+
+            if (cut.type == FlowCoverCut::PLANT)
+            {
+                int i = cut.index;
+
+                for (IloInt t = 0; t < cut.idx_x.getSize(); ++t)
+                {
+                    int idx = cut.idx_x[t];
+                    int ii = idx / inst.nJ;
+                    int jj = idx % inst.nJ;
+                    if (ii == i)
+                        cut_cost_x[ii][jj] += cut.lambda * cut.coef_x[t];
+                }
+
+                cut_fix_a[i] += cut.lambda * cut.coef_open;
+            }
+            else // DEPOT
+            {
+                int j = cut.index;
+
+                for (IloInt t = 0; t < cut.idx_y.getSize(); ++t)
+                {
+                    int idx = cut.idx_y[t];
+                    int jj = idx / inst.nK;
+                    int kk = idx % inst.nK;
+                    if (jj == j)
+                        cut_cost_y[jj][kk] += cut.lambda * cut.coef_y[t];
+                }
+
+                cut_fix_b[j] += cut.lambda * cut.coef_open;
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // Resolve o problema lagrangeano para (u, v, λ) fixos
+    // Retorna z_LR (cortes já incorporados em cut_cost_* / cut_fix_*).
+    // -----------------------------------------------------------------
+    double solve_lagrangian()
+    {
+        const int nI = inst.nI;
+        const int nJ = inst.nJ;
+        const int nK = inst.nK;
+
+        build_cut_costs();
+
+        // zera fluxos
+        for (int i = 0; i < nI; ++i)
+            for (int j = 0; j < nJ; ++j)
+                x_lr[i][j] = 0.0;
+
+        for (int j = 0; j < nJ; ++j)
+            for (int k = 0; k < nK; ++k)
+                y_lr[j][k] = 0.0;
+
+        // Para cada cliente k: escolhe (i,j) de menor custo reduzido
+        for (int k = 0; k < nK; ++k)
+        {
+            double rk = inst.r[k];
+            if (rk <= EPS)
+                continue;
+
+            double best_cost = IloInfinity;
+            int best_i = -1;
+            int best_j = -1;
+
+            for (int i = 0; i < nI; ++i)
+            {
+                for (int j = 0; j < nJ; ++j)
+                {
+                    double cost =
+                        inst.c[i][j] + inst.d[j][k] +
+                        u[i] + v[j] +
+                        cut_cost_x[i][j] + cut_cost_y[j][k];
+
+                    if (cost < best_cost)
+                    {
+                        best_cost = cost;
+                        best_i = i;
+                        best_j = j;
+                    }
+                }
+            }
+
+            if (best_i == -1 || best_j == -1)
+                continue;
+
+            x_lr[best_i][best_j] += rk;
+            y_lr[best_j][k] += rk;
+        }
+
+        // Fluxos agregados
+        for (int i = 0; i < nI; ++i)
+        {
+            double sum = 0.0;
+            for (int j = 0; j < nJ; ++j)
+                sum += x_lr[i][j];
+            plant_flow_lr[i] = sum;
+        }
+
+        for (int j = 0; j < nJ; ++j)
+        {
+            double sum = 0.0;
+            for (int k = 0; k < nK; ++k)
+                sum += y_lr[j][k];
+            depot_flow_lr[j] = sum;
+        }
+
+        // a_lr / b_lr (coeficiente reduzido < 0 => abre)
+        for (int i = 0; i < nI; ++i)
+        {
+            double red_fix = inst.f[i] - u[i] * inst.p[i] + cut_fix_a[i];
+            a_lr[i] = (red_fix < 0.0 ? 1.0 : 0.0);
+        }
+        for (int j = 0; j < nJ; ++j)
+        {
+            double red_fix = inst.g[j] - v[j] * inst.q[j] + cut_fix_b[j];
+            b_lr[j] = (red_fix < 0.0 ? 1.0 : 0.0);
+        }
+
+        // Subgradientes (capacidade)
+        for (int i = 0; i < nI; ++i)
+            gu[i] = plant_flow_lr[i] - inst.p[i] * a_lr[i];
+
+        for (int j = 0; j < nJ; ++j)
+            gv[j] = depot_flow_lr[j] - inst.q[j] * b_lr[j];
+
+        // Valor da lagrangeana
+        double cost_fix = 0.0;
+        for (int i = 0; i < nI; ++i)
+            cost_fix += inst.f[i] * a_lr[i];
+        for (int j = 0; j < nJ; ++j)
+            cost_fix += inst.g[j] * b_lr[j];
+
+        double cost_flow = 0.0;
+        for (int i = 0; i < nI; ++i)
+            for (int j = 0; j < nJ; ++j)
+                cost_flow += inst.c[i][j] * x_lr[i][j];
+
+        for (int j = 0; j < nJ; ++j)
+            for (int k = 0; k < nK; ++k)
+                cost_flow += inst.d[j][k] * y_lr[j][k];
+
+        double lag_cap = 0.0;
+        for (int i = 0; i < nI; ++i)
+            lag_cap += u[i] * gu[i];
+        for (int j = 0; j < nJ; ++j)
+            lag_cap += v[j] * gv[j];
+
+        // cortes já foram incorporados via cut_cost_* / cut_fix_*
+        double z_lr = cost_fix + cost_flow + lag_cap;
+        return z_lr;
+    }
+
+    // -----------------------------------------------------------------
+    // Separa Flow Covers a partir da solução LR
+    // -----------------------------------------------------------------
+    void separate_flow_covers()
+    {
+        const int nI = inst.nI;
+        const int nJ = inst.nJ;
+        const int nK = inst.nK;
+
+        int new_cuts = 0;
+
+        // Plantas
+        for (int i = 0; i < nI && new_cuts < MAX_NEW_CUTS_PER_ITER; ++i)
+        {
+            double cap_i = inst.p[i] * a_lr[i];
+            double flow_i = plant_flow_lr[i];
+
+            if (flow_i <= cap_i + EPS)
+                continue;
+
+            FlowCoverCut cut(env);
+            cut.type = FlowCoverCut::PLANT;
+            cut.index = i;
+            cut.coef_open = -inst.p[i];
+            cut.rhs = 0.0;
+            cut.lambda = 0.0;
+            cut.age = 0;
+            cut.status = FlowCoverCut::CA;
+
+            for (int j = 0; j < nJ; ++j)
+            {
+                if (x_lr[i][j] > EPS)
+                {
+                    int idx = i * nJ + j;
+                    cut.idx_x.add(idx);
+                    cut.coef_x.add(1.0);
+                }
+            }
+
+            if (cut.idx_x.getSize() == 0)
+                continue;
+
+            std::size_t h = cut_hash(cut);
+            if (!cut_hashes.insert(h).second)
+                continue; // corte duplicado
+
+            cuts.push_back(cut);
+            ++new_cuts;
+        }
+
+        // Depósitos
+        for (int j = 0; j < nJ && new_cuts < MAX_NEW_CUTS_PER_ITER; ++j)
+        {
+            double cap_j = inst.q[j] * b_lr[j];
+            double flow_j = depot_flow_lr[j];
+
+            if (flow_j <= cap_j + EPS)
+                continue;
+
+            FlowCoverCut cut(env);
+            cut.type = FlowCoverCut::DEPOT;
+            cut.index = j;
+            cut.coef_open = -inst.q[j];
+            cut.rhs = 0.0;
+            cut.lambda = 0.0;
+            cut.age = 0;
+            cut.status = FlowCoverCut::CA;
+
+            for (int k = 0; k < nK; ++k)
+            {
+                if (y_lr[j][k] > EPS)
+                {
+                    int idx = j * nK + k;
+                    cut.idx_y.add(idx);
+                    cut.coef_y.add(1.0);
+                }
+            }
+
+            if (cut.idx_y.getSize() == 0)
+                continue;
+
+            std::size_t h = cut_hash(cut);
+            if (!cut_hashes.insert(h).second)
+                continue; // corte duplicado
+
+            cuts.push_back(cut);
+            ++new_cuts;
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // Atualiza violações e conjuntos CA/PA/CI
+    // -----------------------------------------------------------------
+    void update_cut_sets()
+    {
+        for (auto &cut : cuts)
+        {
+            double lhs = 0.0;
+
+            // x_ij
+            for (IloInt t = 0; t < cut.idx_x.getSize(); ++t)
+            {
+                int idx = cut.idx_x[t];
+                int i = idx / inst.nJ;
+                int j = idx % inst.nJ;
+                lhs += cut.coef_x[t] * x_lr[i][j];
+            }
+
+            // y_jk
+            for (IloInt t = 0; t < cut.idx_y.getSize(); ++t)
+            {
+                int idx = cut.idx_y[t];
+                int j = idx / inst.nK;
+                int k = idx % inst.nK;
+                lhs += cut.coef_y[t] * y_lr[j][k];
+            }
+
+            // termo de abertura
+            if (cut.type == FlowCoverCut::PLANT)
+            {
+                int i = cut.index;
+                lhs += cut.coef_open * a_lr[i];
+            }
+            else
+            {
+                int j = cut.index;
+                lhs += cut.coef_open * b_lr[j];
+            }
+
+            cut.violation = lhs - cut.rhs;
+
+            if (cut.violation > EPS)
+            {
+                cut.status = FlowCoverCut::CA;
+                cut.age = 0;
+            }
+            else
+            {
+                ++cut.age;
+                if (cut.age <= EXTRA_AGE && cut.lambda > EPS)
+                {
+                    cut.status = FlowCoverCut::PA;
+                }
+                else
+                {
+                    cut.status = FlowCoverCut::CI;
+                    cut.lambda = 0.0;
+                }
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // Heurística primal (UB) usando Worker (Dual / Primal / Net)
+    // -----------------------------------------------------------------
+    void run_primal_heuristic()
+    {
+        const int nI = inst.nI;
+        const int nJ = inst.nJ;
+
+        if (total_demand <= EPS || !worker)
+            return;
+
+        // 1) Plantas abertas (ordem guiada por a_lr e f/p)
+        std::vector<int> ordI(nI);
+        for (int i = 0; i < nI; ++i)
+            ordI[i] = i;
+
+        std::sort(ordI.begin(), ordI.end(),
+                  [&](int i, int j)
+                  {
+                      if (std::fabs(a_lr[i] - a_lr[j]) > EPS)
+                          return a_lr[i] > a_lr[j];
+
+                      double ratio_i = inst.p[i] > EPS ? inst.f[i] / inst.p[i] : IloInfinity;
+                      double ratio_j = inst.p[j] > EPS ? inst.f[j] / inst.p[j] : IloInfinity;
+                      return ratio_i < ratio_j;
+                  });
+
+        std::vector<char> openI(nI, 0);
+        double capI = 0.0;
+        for (int pos = 0; pos < nI && capI + EPS < total_demand; ++pos)
+        {
+            int i = ordI[pos];
+            if (inst.p[i] <= EPS)
+                continue;
+            openI[i] = 1;
+            capI += inst.p[i];
+        }
+        if (capI + EPS < total_demand)
+            return;
+
+        // 2) Depósitos abertos
+        std::vector<int> ordJ(nJ);
+        for (int j = 0; j < nJ; ++j)
+            ordJ[j] = j;
+
+        std::sort(ordJ.begin(), ordJ.end(),
+                  [&](int j1, int j2)
+                  {
+                      if (std::fabs(b_lr[j1] - b_lr[j2]) > EPS)
+                          return b_lr[j1] > b_lr[j2];
+
+                      double ratio1 = inst.q[j1] > EPS ? inst.g[j1] / inst.q[j1] : IloInfinity;
+                      double ratio2 = inst.q[j2] > EPS ? inst.g[j2] / inst.q[j2] : IloInfinity;
+                      return ratio1 < ratio2;
+                  });
+
+        std::vector<char> openJ(nJ, 0);
+        double capJ = 0.0;
+        for (int pos = 0; pos < nJ && capJ + EPS < total_demand; ++pos)
+        {
+            int j = ordJ[pos];
+            if (inst.q[j] <= EPS)
+                continue;
+            openJ[j] = 1;
+            capJ += inst.q[j];
+        }
+        if (capJ + EPS < total_demand)
+            return;
+
+        // 3) Monta (a_h, b_h) e chama Worker
+        IloNumArray a_h(env, nI);
+        IloNumArray b_h(env, nJ);
+
+        for (int i = 0; i < nI; ++i)
+            a_h[i] = openI[i] ? 1.0 : 0.0;
+        for (int j = 0; j < nJ; ++j)
+            b_h[j] = openJ[j] ? 1.0 : 0.0;
+
+        double cost_fix = 0.0;
+        for (int i = 0; i < nI; ++i)
+            cost_fix += inst.f[i] * a_h[i];
+        for (int j = 0; j < nJ; ++j)
+            cost_fix += inst.g[j] * b_h[j];
+
+        double flow_cost = 0.0;
+        try
+        {
+            worker->solve(a_h, b_h);
+            flow_cost = worker->theta;
+        }
+        catch (...)
+        {
+            return;
+        }
+
+        double ub_cand = cost_fix + flow_cost;
+        if (ub_cand + EPS < ub)
+        {
+            ub = ub_cand;
+            for (int i = 0; i < nI; ++i)
+                a_best[i] = a_h[i];
+            for (int j = 0; j < nJ; ++j)
+                b_best[j] = b_h[j];
+        }
+    }
+
+public:
+    // -----------------------------------------------------------------
+    //  Método principal
+    // -----------------------------------------------------------------
+    bool solve(bool log_output = true, double time_limit = -1.0)
+    {
+        lb = -IloInfinity;
+        ub = IloInfinity;
+        gap = IloInfinity;
+        status = IloAlgorithm::Unknown;
+        time = 0.0;
+
+        epsilon = EPSILON0;
+        int last_improv_iter = 0;
+        double best_lb = lb;
+
+        // multipliers e melhor solução primal começam em zero
+        for (int i = 0; i < inst.nI; ++i)
+        {
+            u[i] = 0.0;
+            gu[i] = 0.0;
+            a_best[i] = 0.0;
+        }
+        for (int j = 0; j < inst.nJ; ++j)
+        {
+            v[j] = 0.0;
+            gv[j] = 0.0;
+            b_best[j] = 0.0;
+        }
+
+        cuts.clear();
+        cut_hashes.clear();
+
+        auto t0 = std::chrono::steady_clock::now();
+        int iter = 0;
+
+        if (log_output)
+        {
+            std::cout << "[RC] Iniciando Relax-and-Cut\n";
+            std::cout << "[RC] time_limit = " << time_limit
+                      << ", epsilon0 = " << EPSILON0 << "\n";
+            std::cout << "[RC] it   time(s)     z_LR        LB         UB"
+                         "         gap    step    ||g||^2   |CA| |PA| |CI|\n";
+        }
 
         while (true)
         {
-            // Controle de tempo
             auto t1 = std::chrono::steady_clock::now();
             double elapsed = std::chrono::duration<double>(t1 - t0).count();
+            if (time_limit > 0.0 && elapsed >= time_limit)
+                break;
 
-            if (has_time_limit)
+            // 1) Lagrangeano
+            double z_lr = solve_lagrangian();
+
+            // 2) Cortes (separação + atualização dos conjuntos)
+            separate_flow_covers();
+            update_cut_sets();
+
+            // 3) Atualiza LB
+            if (z_lr > lb + EPS)
             {
-                double remaining = time_limit - elapsed;
-                if (remaining <= 0.0)
-                    break; // time limit atingido
-
-                // Garante que cada solve do CPLEX respeite o tempo restante
-                cplex.setParam(IloCplex::Param::TimeLimit, remaining);
+                lb = z_lr;
+                best_lb = lb;
+                last_improv_iter = iter;
             }
 
-            // Resolve o RMP atual
-            if (!cplex.solve())
+            // 4) Heurística primal (UB)
+            if (iter == 0 ||
+                (iter % SOLVE_HEURISTIC_EVERY == 0) ||
+                (z_lr > best_lb + EPS))
             {
-                status = cplex.getStatus();
-                time = std::chrono::duration<double>(
-                           std::chrono::steady_clock::now() - t0)
-                           .count();
-
-                std::cerr << "[CG] RMP infeasible ou erro, status = "
-                          << status << "\n";
-                return false;
+                run_primal_heuristic();
             }
 
-            status = cplex.getStatus();
-            double z_rmp = cplex.getObjValue();
-            last_rmp_value = z_rmp;
-            lp_ub = z_rmp;
+            // 5) Norma do subgradiente
+            double norm2 = norm2_squared();
 
-            // Atualiza heurística primal (UB do inteiro)
-            run_heuristic_from_rmp();
-
-            // Recupera duais do RMP:
-            IloNumArray l1(env, inst.nI), l2(env, inst.nJ), m2(env, inst.nK);
-
-            cplex.getDuals(l1, constr_l1); // capacidade plantas
-            cplex.getDuals(l2, constr_l2); // capacidade depósitos
-            cplex.getDuals(m2, constr_m2); // demanda/convexidade clientes
-
-            // Pricing: tenta gerar novas colunas
-            bool any_new = false;
-
-            for (int k = 0; k < inst.nK; ++k)
+            // 6) Passo de Polyak
+            double step = 0.0;
+            if (ub < IloInfinity && norm2 > EPS)
             {
-                double rk = inst.r[k];
+                step = epsilon * (ub - z_lr) / norm2;
+                if (step < 0.0)
+                    step = 0.0;
+            }
 
-                double best_rc = 0.0;
-                int best_i = -1;
-                int best_j = -1;
-
+            // 7) Atualiza multiplicadores
+            if (step > 0.0)
+            {
                 for (int i = 0; i < inst.nI; ++i)
-                {
-                    for (int j = 0; j < inst.nJ; ++j)
-                    {
-                        double rc =
-                            rk * (inst.c[i][j] + inst.d[j][k]) - rk * l1[i] - rk * l2[j] - m2[k];
+                    u[i] = std::max(0.0, u[i] + step * gu[i]);
 
-                        if (rc < best_rc - EPS)
-                        {
-                            best_rc = rc;
-                            best_i = i;
-                            best_j = j;
-                        }
-                    }
-                }
+                for (int j = 0; j < inst.nJ; ++j)
+                    v[j] = std::max(0.0, v[j] + step * gv[j]);
 
-                if (best_i != -1)
+                for (auto &cut : cuts)
                 {
-                    add_column_for_client(k, best_i, best_j);
-                    any_new = true;
+                    if (cut.status != FlowCoverCut::CI)
+                        cut.lambda = std::max(0.0, cut.lambda + step * cut.violation);
                 }
             }
 
-            // Critério de parada:
-            // - Se não gerou nenhuma coluna nova, atingimos o ótimo da relaxação.
-            if (!any_new)
+            // 8) Ajuste de epsilon (sem epsilon mínimo)
+            if (iter - last_improv_iter >= max_no_improv)
             {
-                lb = z_rmp; // valor ótimo da LP
-                converged = true;
+                epsilon *= 0.5;
+                last_improv_iter = iter;
+            }
+
+            // 9) Gap atual
+            if (ub < IloInfinity && lb > -IloInfinity)
+            {
+                gap = (ub - lb) / std::max(1.0, std::abs(ub));
+            }
+
+            // 10) Log
+            if (log_output && (iter % PRINT_EVERY == 0))
+            {
+                int ca = 0, pa = 0, ci = 0;
+                for (const auto &cut : cuts)
+                {
+                    if (cut.status == FlowCoverCut::CA)
+                        ++ca;
+                    else if (cut.status == FlowCoverCut::PA)
+                        ++pa;
+                    else
+                        ++ci;
+                }
+
+                double elapsed_it =
+                    std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+
+                std::cout << "[RC] " << std::setw(4) << iter
+                          << " " << std::setw(8) << std::fixed << std::setprecision(2) << elapsed_it
+                          << " " << std::scientific << std::setprecision(6) << z_lr
+                          << " " << std::scientific << std::setprecision(6) << lb
+                          << " " << std::scientific << std::setprecision(6) << ub
+                          << " " << std::fixed << std::setprecision(6) << gap
+                          << " " << std::scientific << std::setprecision(6) << step
+                          << " " << std::scientific << std::setprecision(6) << norm2
+                          << " " << std::setw(4) << ca
+                          << " " << std::setw(4) << pa
+                          << " " << std::setw(4) << ci
+                          << "\n";
+            }
+
+            // 11) Critério de parada por gap
+            if (gap <= MIP_GAP && ub < IloInfinity && lb > -IloInfinity)
+            {
+                status = IloAlgorithm::Optimal;
                 break;
             }
 
-            // - Se não há time_limit, o loop continua até convergir.
-            // - Se há time_limit, o while será interrompido lá em cima
-            //   quando elapsed >= time_limit.
+            ++iter;
         }
 
         auto t_end = std::chrono::steady_clock::now();
         time = std::chrono::duration<double>(t_end - t0).count();
 
-        if (converged)
+        if (status == IloAlgorithm::Unknown)
         {
-            status = IloAlgorithm::Optimal;
-        }
-        else if (status == IloAlgorithm::Unknown)
-        {
-            // Não convergiu (por tempo), mas temos uma solução RMP viável
-            status = IloAlgorithm::Feasible;
-        }
-
-        // gap só faz sentido se tivermos LB finito e UB finito
-        if (ub < IloInfinity && lb > -IloInfinity)
-        {
-            double denom = std::max(1.0, std::abs(ub));
-            gap = (ub - lb) / denom;
-        }
-        else
-        {
-            gap = IloInfinity;
+            if (ub < IloInfinity && lb > -IloInfinity)
+                status = IloAlgorithm::Feasible;
         }
 
         if (log_output)
         {
-            std::cout << "\n[CG] Column Generation finalizado.\n";
-            std::cout << "LP*   = " << (lb > -IloInfinity ? lb : last_rmp_value)
-                      << "  (LB relaxação, se convergiu)\n";
-            std::cout << "UB    = " << ub << "  (melhor primal viável)\n";
+            std::cout << "\n[RC] Relax-and-Cut finalizado.\n";
+            std::cout << "LB    = " << lb << "\n";
+            std::cout << "UB    = " << ub << "\n";
             std::cout << "gap   = " << gap << "\n";
             std::cout << "status= " << status << "\n";
             std::cout << "time  = " << time << " s\n";
+            if (status == IloAlgorithm::Feasible)
+                std::cout << "[RC] Parada por time_limit.\n";
         }
 
-        // Retorna true se convergiu para o ótimo da relaxação,
-        // false se parou por tempo.
-        return converged;
+        return (status == IloAlgorithm::Optimal);
     }
 };

@@ -13,7 +13,7 @@ Gabriel Braun, 2025
 #include <stdexcept>
 #include <vector>
 
-#include "tscfl_benders_base_worker.hpp"
+#include "tscfl_worker.hpp"
 
 ILOSTLBEGIN
 

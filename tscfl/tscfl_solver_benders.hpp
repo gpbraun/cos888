@@ -17,9 +17,9 @@ Gabriel Braun, 2025
 #include <stdexcept>
 
 #include "tscfl_instance.hpp"
-#include "benders_workers/tscfl_benders_worker_dual.hpp"
-#include "benders_workers/tscfl_benders_worker_primal.hpp"
-#include "benders_workers/tscfl_benders_worker_net.hpp"
+#include "workers/tscfl_worker_dual.hpp"
+#include "workers/tscfl_worker_primal.hpp"
+#include "workers/tscfl_worker_net.hpp"
 
 ILOSTLBEGIN
 

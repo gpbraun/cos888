@@ -1,7 +1,7 @@
 /*
 COS888
 
-Classe base abstrata para os Workers de Benders no TSCFL.
+Classe base abstrata para os Workers do subproblema de fluxo em rede TSCFL.
 
 Gabriel Braun, 2025
 */
@@ -14,7 +14,7 @@ Gabriel Braun, 2025
 
 ILOSTLBEGIN
 
-// SOLVER DO SUBPROBLEMA DE BENDERS: Base
+// SOLVER DO SUBPROBLEMA: Base
 class Worker
 {
 public:
@@ -23,7 +23,7 @@ public:
     // Saída do subproblema
     double theta{0.0};  // valor ótimo do subproblema
     double rhs{0.0};    // termo independente do corte
-    IloNumArray coef_a; // coeficientes multiplicando a_i (no env do mestre)
+    IloNumArray coef_a; // coeficientes multiplicando a_i
     IloNumArray coef_b; // coeficientes multiplicando b_j
 
     explicit Worker(const TSCFLInstance &inst_)

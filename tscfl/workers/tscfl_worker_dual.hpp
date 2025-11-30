@@ -11,7 +11,7 @@ Gabriel Braun, 2025
 #include <ilcplex/ilocplex.h>
 #include <stdexcept>
 
-#include "tscfl_benders_base_worker.hpp"
+#include "tscfl_worker.hpp"
 
 ILOSTLBEGIN
 
