@@ -101,13 +101,13 @@ public:
     int nJ{0}; // |J| depósitos
     int nK{0}; // |K| clientes
 
-    IloNumArray f;  // f_i  = custo fixo da planta i
-    IloNumArray g;  // g_j  = custo fixo do depósito j
-    IloNumArray p;  // p_i  = capacidade da planta i
-    IloNumArray q;  // q_j  = capacidade do depósito j
-    IloNumArray r;  // r_k  = demanda do cliente k
-    IloNumMatrix c; // c_ij = custo planta i -> depósito j
-    IloNumMatrix d; // d_jk = custo depósito j -> cliente k
+    IloNumArray f;  // f[i]    = custo fixo da planta i
+    IloNumArray g;  // g[j]    = custo fixo do depósito j
+    IloNumArray p;  // p[i]    = capacidade da planta i
+    IloNumArray q;  // q[j]    = capacidade do depósito j
+    IloNumArray r;  // r[k]    = demanda do cliente k
+    IloNumMatrix c; // c[i][j] = custo planta i -> depósito j
+    IloNumMatrix d; // d[j][k] = custo depósito j -> cliente k
 
     explicit TSCFLInstance(IloEnv &env_, int _nI, int _nJ, int _nK)
         : env(env_),

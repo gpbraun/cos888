@@ -11,7 +11,7 @@ Gabriel Braun, 2025
 #include <ilcplex/ilocplex.h>
 #include <stdexcept>
 
-#include "tscfl_benders_worker.hpp"
+#include "tscfl_benders_base_worker.hpp"
 
 ILOSTLBEGIN
 
@@ -22,10 +22,10 @@ private:
     IloCplex cplex;
 
     // Variáveis duais
-    IloNumVarArray l1; // l1_i = dual da capacidade da planta i   (<= 0)
-    IloNumVarArray l2; // l2_j = dual da capacidade do depósito j (<= 0)
-    IloNumVarArray m1; // m1_j = dual do balanço nos depósitos j  (livre)
-    IloNumVarArray m2; // m2_k = dual da demanda do cliente k     (livre)
+    IloNumVarArray l1; // l1[i] = dual da capacidade da planta i   (<= 0)
+    IloNumVarArray l2; // l2[j] = dual da capacidade do depósito j (<= 0)
+    IloNumVarArray m1; // m1[j] = dual do balanço nos depósitos j  (livre)
+    IloNumVarArray m2; // m2[k] = dual da demanda do cliente k     (livre)
 
     // Função objetivo
     IloObjective obj;
@@ -41,13 +41,13 @@ public:
           m2(env, inst_.nK, -IloInfinity, IloInfinity, ILOFLOAT),
           obj(IloMaximize(env, 0.0))
     {
-        build_model();
+        build_base_model();
         cplex.extract(model);
 
         // Parâmetros do CPLEX (subproblema)
         cplex.setParam(IloCplex::Param::Threads, 1);
         cplex.setParam(IloCplex::Param::Preprocessing::Reduce, 0);
-        cplex.setParam(IloCplex::Param::RootAlgorithm, IloCplex::Primal);
+        cplex.setParam(IloCplex::Param::RootAlgorithm, IloCplex::Dual);
 
         // Subproblema silencioso por padrão
         cplex.setOut(env.getNullStream());
@@ -61,8 +61,10 @@ public:
     }
 
 private:
-    void build_model()
+    // Constrói o modelo base do subproblema dual
+    void build_base_model()
     {
+        // RESTRIÇÕES DO SUBPROBLEMA DUAL
         for (int i = 0; i < inst.nI; ++i)
             for (int j = 0; j < inst.nJ; ++j)
                 model.add(l1[i] + m1[j] <= inst.c[i][j]);
@@ -71,22 +73,24 @@ private:
             for (int k = 0; k < inst.nK; ++k)
                 model.add(l2[j] - m1[j] + m2[k] <= inst.d[j][k]);
 
+        // FUNÇÃO OBJETIVO
         model.add(obj);
     }
 
+    // Atualiza a função objetivo do subproblema em função de (a,b)
     void set_objective(const IloNumArray &a_vals, const IloNumArray &b_vals)
     {
-        IloExpr expr(env);
+        IloExpr obj_expr(env);
 
         for (int i = 0; i < inst.nI; ++i)
-            expr += (inst.p[i] * a_vals[i]) * l1[i];
+            obj_expr += (inst.p[i] * a_vals[i]) * l1[i];
         for (int j = 0; j < inst.nJ; ++j)
-            expr += (inst.q[j] * b_vals[j]) * l2[j];
+            obj_expr += (inst.q[j] * b_vals[j]) * l2[j];
         for (int k = 0; k < inst.nK; ++k)
-            expr += inst.r[k] * m2[k];
+            obj_expr += inst.r[k] * m2[k];
 
-        obj.setExpr(expr);
-        expr.end();
+        obj.setExpr(obj_expr);
+        obj_expr.end();
     }
 
 public:

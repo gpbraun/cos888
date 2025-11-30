@@ -34,10 +34,10 @@ private:
     IloModel model;
     IloCplex cplex;
 
-    IloBoolVarArray a; // a_i  = abre planta i
-    IloBoolVarArray b; // b_j  = abre depósito j
-    IloNumVarMatrix x; // x_ij = fluxo planta i -> depósito j
-    IloNumVarMatrix y; // y_jk = fluxo depósito j -> cliente k
+    IloBoolVarArray a; // a[i]    = abre planta i
+    IloBoolVarArray b; // b[j]    = abre depósito j
+    IloNumVarMatrix x; // x[i][j] = fluxo planta i -> depósito j
+    IloNumVarMatrix y; // y[j][k] = fluxo depósito j -> cliente k
 
 public:
     explicit TSCFLSolverCplex(const TSCFLInstance &inst_)
@@ -98,6 +98,7 @@ private:
 
         // FUNÇÃO OBJETIVO
         IloExpr obj_expr(env);
+
         // Custos fixos
         obj_expr += IloScalProd(inst.f, a) + IloScalProd(inst.g, b);
         // Custos de fluxo

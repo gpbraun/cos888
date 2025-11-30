@@ -11,7 +11,7 @@ Gabriel Braun, 2025
 #include <ilcplex/ilocplex.h>
 #include <stdexcept>
 
-#include "tscfl_benders_worker.hpp"
+#include "tscfl_benders_base_worker.hpp"
 
 ILOSTLBEGIN
 
@@ -22,14 +22,14 @@ private:
     IloCplex cplex;
 
     // Variáveis de fluxo
-    IloNumVarMatrix x; // x_ij = fluxo planta i -> depósito j
-    IloNumVarMatrix y; // y_jk = fluxo depósito j -> cliente k
+    IloNumVarMatrix x; // x[i][j] = fluxo planta i -> depósito j
+    IloNumVarMatrix y; // y[j][k] = fluxo depósito j -> cliente k
 
     // Restrições
-    IloRangeArray plantCap; // capacidade das plantas
-    IloRangeArray depotCap; // capacidade dos depósitos
-    IloRangeArray flowBal;  // balanço de fluxo nos depósitos
-    IloRangeArray demand;   // atendimento da demanda dos clientes
+    IloRangeArray constr_l1; // constr_l1[i] = restrição de capacidade da planta i
+    IloRangeArray constr_l2; // constr_l2[j] = restrição de capacidade do depósito j
+    IloRangeArray constr_m1; // constr_m1[j] = restrição de balanço nos depósitos j
+    IloRangeArray constr_m2; // constr_m2[k] = restrição de demanda do cliente k
 
 public:
     explicit WorkerPrimal(const TSCFLInstance &inst_)
@@ -38,12 +38,12 @@ public:
           cplex(env),
           x(env, inst_.nI, inst_.nJ),
           y(env, inst_.nJ, inst_.nK),
-          plantCap(env, inst_.nI),
-          depotCap(env, inst_.nJ),
-          flowBal(env, inst_.nJ),
-          demand(env, inst_.nK)
+          constr_l1(env, inst_.nI),
+          constr_l2(env, inst_.nJ),
+          constr_m1(env, inst_.nJ),
+          constr_m2(env, inst_.nK)
     {
-        build_model();
+        build_base_model();
         cplex.extract(model);
 
         // Parâmetros do CPLEX (subproblema)
@@ -63,75 +63,40 @@ public:
     }
 
 private:
-    void build_model()
+    // Constrói o modelo base do subproblema dual
+    void build_base_model()
     {
-        // -----------------------------------------------------------------
-        // Capacidade das plantas:
-        //   sum_j x_ij <= p_i a_i
-        // Reescrevemos como: -sum_j x_ij >= -p_i a_i
-        // para ter forma "expr >= LB", onde LB depende de a_i.
-        // O LB será ajustado em set_constraints().
-        // -----------------------------------------------------------------
+        // RESTRIÇÕES DO SUBPROBLEMA PRIMAL
+        // Capacidade das plantas
         for (int i = 0; i < inst.nI; ++i)
         {
-            IloExpr e(env);
-            e -= IloSum(x[i]); // -sum_j x_ij
-
-            plantCap[i] = IloRange(env, -IloInfinity, e, IloInfinity);
-            model.add(plantCap[i]);
-            e.end();
+            constr_l1[i] = IloRange(env, -IloInfinity, -IloSum(x[i]), IloInfinity);
+            model.add(constr_l1[i]);
         }
-
-        // -----------------------------------------------------------------
-        // Capacidade dos depósitos:
-        //   sum_k y_jk <= q_j b_j
-        // Reescrevemos como: -sum_k y_jk >= -q_j b_j
-        // LB ajustado em set_constraints().
-        // -----------------------------------------------------------------
+        // Capacidade dos depósitos
         for (int j = 0; j < inst.nJ; ++j)
         {
-            IloExpr e(env);
-            e -= IloSum(y[j]); // -sum_k y_jk
-
-            depotCap[j] = IloRange(env, -IloInfinity, e, IloInfinity);
-            model.add(depotCap[j]);
-            e.end();
+            constr_l2[j] = IloRange(env, -IloInfinity, -IloSum(y[j]), IloInfinity);
+            model.add(constr_l2[j]);
         }
-
-        // -----------------------------------------------------------------
-        // Balanço nos depósitos:
-        //   sum_i x_ij - sum_k y_jk = 0
-        // RHS fixo (=0), não depende de (a,b).
-        // -----------------------------------------------------------------
+        // Balanço nos depósitos
         for (int j = 0; j < inst.nJ; ++j)
         {
-            IloExpr e(env);
-            e += IloSum(x.col(j)); // sum_i x_ij
-            e -= IloSum(y[j]);     // sum_k y_jk
-
-            flowBal[j] = IloRange(env, 0.0, e, 0.0);
-            model.add(flowBal[j]);
-            e.end();
+            constr_m1[j] = IloRange(env, 0.0, IloSum(x.col(j)) - IloSum(y[j]), 0.0);
+            model.add(constr_m1[j]);
         }
-
-        // -----------------------------------------------------------------
-        // Demanda dos clientes:
-        //   sum_j y_jk >= r_k
-        // RHS = r_k, constante, indep. de (a,b).
-        // -----------------------------------------------------------------
+        // Demanda dos clientes
         for (int k = 0; k < inst.nK; ++k)
         {
-            IloExpr e(env);
-            e += IloSum(y.col(k)); // sum_j y_jk
-
-            demand[k] = IloRange(env, inst.r[k], e, IloInfinity);
-            model.add(demand[k]);
-            e.end();
+            constr_m2[k] = IloRange(env, inst.r[k], IloSum(y.col(k)), IloInfinity);
+            model.add(constr_m2[k]);
         }
 
         // FUNÇÃO OBJETIVO
         IloExpr obj_expr(env);
+
         obj_expr += IloMatProd(inst.c, x) + IloMatProd(inst.d, y);
+
         IloObjective obj = IloMinimize(env, obj_expr);
         model.add(obj);
         obj_expr.end();
@@ -140,12 +105,13 @@ private:
     // Atualiza o lado direito das restrições que dependem de (a,b)
     void set_constraints(const IloNumArray &a_vals, const IloNumArray &b_vals)
     {
-        //   -sum_j x_ij >= -p_i a_i   -> LB = -p_i a_i
+        // Capacidade das plantas
         for (int i = 0; i < inst.nI; ++i)
-            plantCap[i].setBounds(-inst.p[i] * a_vals[i], IloInfinity);
-        //   -sum_k y_jk >= -q_j b_j   -> LB = -q_j b_j
+            constr_l1[i].setBounds(-inst.p[i] * a_vals[i], IloInfinity);
+
+        // Capacidade dos depósitos
         for (int j = 0; j < inst.nJ; ++j)
-            depotCap[j].setBounds(-inst.q[j] * b_vals[j], IloInfinity);
+            constr_l2[j].setBounds(-inst.q[j] * b_vals[j], IloInfinity);
     }
 
 public:
@@ -163,29 +129,22 @@ public:
         theta = cplex.getObjValue();
 
         // 3) Lê as variáveis duais
-        IloNumArray duPlant(env), duDepot(env), duDemand(env);
-
-        cplex.getDuals(duPlant, plantCap);
-        cplex.getDuals(duDepot, depotCap);
-        cplex.getDuals(duDemand, demand);
+        IloNumArray l1(env), l2(env), m2(env);
+        cplex.getDuals(l1, constr_l1);
+        cplex.getDuals(l2, constr_l2);
+        cplex.getDuals(m2, constr_m2);
 
         // 4) Calcula os coeficientes do corte
         for (int i = 0; i < inst.nI; ++i)
-            coef_a[i] = -inst.p[i] * duPlant[i];
+            coef_a[i] = -inst.p[i] * l1[i];
 
-        // Depósitos:
-        //   -sum_k y_jk >= -q_j b_j  => coef_b[j] = -q_j l2_j
         for (int j = 0; j < inst.nJ; ++j)
-            coef_b[j] = -inst.q[j] * duDepot[j];
+            coef_b[j] = -inst.q[j] * l2[j];
 
-        // Demandas:
-        //   sum_j y_jk >= r_k  => termo constante rhs = sum_k r_k m2_k
-        rhs = 0.0;
-        for (int k = 0; k < inst.nK; ++k)
-            rhs += inst.r[k] * duDemand[k];
+        rhs = IloScalProd(inst.r, m2);
 
-        duPlant.end();
-        duDepot.end();
-        duDemand.end();
+        l1.end();
+        l2.end();
+        m2.end();
     }
 };

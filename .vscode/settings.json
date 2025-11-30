@@ -27,17 +27,9 @@
   },
   "files.associations": {
     "*.sty": "latex-expl3",
-    "array": "cpp",
-    "chrono": "cpp",
-    "deque": "cpp",
-    "string": "cpp",
+    "iostream": "cpp",
     "unordered_map": "cpp",
-    "vector": "cpp",
-    "string_view": "cpp",
-    "format": "cpp",
-    "initializer_list": "cpp",
-    "span": "cpp",
-    "random": "cpp",
-    "stdexcept": "cpp"
+    "optional": "cpp",
+    "variant": "cpp"
   },
 }
