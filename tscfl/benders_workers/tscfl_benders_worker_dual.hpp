@@ -15,9 +15,11 @@ Gabriel Braun, 2025
 
 ILOSTLBEGIN
 
+// SOLVER DO SUBPROBLEMA DE BENDERS: Dual
 class WorkerDual : public Worker
 {
 private:
+    IloEnv env;
     IloModel model;
     IloCplex cplex;
 
@@ -33,6 +35,7 @@ private:
 public:
     explicit WorkerDual(const TSCFLInstance &inst_)
         : Worker(inst_),
+          env(),
           model(env),
           cplex(env),
           l1(env, inst_.nI, -IloInfinity, 0.0, ILOFLOAT),
@@ -58,6 +61,7 @@ public:
     {
         cplex.end();
         model.end();
+        env.end();
     }
 
 private:

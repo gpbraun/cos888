@@ -17,7 +17,6 @@ ILOSTLBEGIN
 class Worker
 {
 public:
-    IloEnv env;
     const TSCFLInstance &inst;
 
     // Saída do subproblema
@@ -27,17 +26,13 @@ public:
     IloNumArray coef_b; // coeficientes multiplicando b_j
 
     explicit Worker(const TSCFLInstance &inst_)
-        : env(),
-          inst(inst_),
+        : inst(inst_),
           coef_a(inst_.env, inst_.nI),
           coef_b(inst_.env, inst_.nJ)
     {
     }
 
-    virtual ~Worker()
-    {
-        env.end();
-    }
+    virtual ~Worker() = default;
 
     // Dado (a_vals, b_vals) da solução atual do mestre, resolve o subproblema.
     // Atualiza: theta, rhs, coef_a, coef_b

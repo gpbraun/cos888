@@ -22,7 +22,7 @@ class TSCFLSolverCplex
 public:
     const TSCFLInstance &inst;
 
-    // Parâmetros de resultados do solver
+    // Resultados:
     double lb{0.0};
     double ub{0.0};
     double gap{0.0};
@@ -68,7 +68,7 @@ public:
 private:
     void build_model()
     {
-        IloEnv env = inst.env;
+        IloEnv &env = inst.env;
 
         // RESTRIÇÕES
         // Capacidade das plantas
@@ -112,7 +112,7 @@ private:
 public:
     bool solve(bool log_output = true, double time_limit = -1.0)
     {
-        IloEnv env = inst.env;
+        IloEnv &env = inst.env;
 
         // Controle de log
         if (log_output)

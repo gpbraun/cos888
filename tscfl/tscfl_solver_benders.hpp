@@ -23,10 +23,7 @@ Gabriel Braun, 2025
 
 ILOSTLBEGIN
 
-// =====================================================================
-//  CALLBACK: Lazy Constraints
-// =====================================================================
-
+// CALLBACK: Lazy Constraint
 class LazyBendersCallbackI : public IloCplex::LazyConstraintCallbackI
 {
     const TSCFLInstance &inst;
@@ -79,10 +76,7 @@ public:
     }
 };
 
-// =====================================================================
-//  CALLBACK: User Cuts
-// =====================================================================
-
+// CALLBACK: User Cuts
 class UserBendersCallbackI : public IloCplex::UserCutCallbackI
 {
     const TSCFLInstance &inst;
@@ -139,10 +133,7 @@ public:
     }
 };
 
-// =====================================================================
-//  SOLVER TSCFL: Benders Decomposition
-// =====================================================================
-
+// SOLVER TSCFL: Decomposição de Benders
 class TSCFLSolverBenders
 {
 public:
@@ -162,7 +153,7 @@ private:
 
     IloBoolVarArray a; // a_i  = abre planta i
     IloBoolVarArray b; // b_j  = abre depósito j
-    IloNumVar eta;     // variável para custo de segundo estágio
+    IloNumVar eta;     // custo de segundo estágio
 
     std::unique_ptr<Worker> worker;
 
@@ -215,13 +206,12 @@ private:
         IloEnv &env = inst.env;
 
         // Capacidade agregada (garante viabilidade do subproblema)
-        double demand_total = IloSum(inst.r);
-        master.add(IloScalProd(inst.p, a) >= demand_total);
-        master.add(IloScalProd(inst.q, b) >= demand_total);
+        double demand_sum = IloSum(inst.r);
+        master.add(IloScalProd(inst.p, a) >= demand_sum);
+        master.add(IloScalProd(inst.q, b) >= demand_sum);
 
         // OBJETIVO: custo fixo + eta
-        IloObjective obj =
-            IloMinimize(env, IloScalProd(inst.f, a) + IloScalProd(inst.g, b) + eta);
+        IloObjective obj = IloMinimize(env, IloScalProd(inst.f, a) + IloScalProd(inst.g, b) + eta);
         master.add(obj);
     }
 

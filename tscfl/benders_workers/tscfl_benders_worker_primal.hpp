@@ -15,9 +15,11 @@ Gabriel Braun, 2025
 
 ILOSTLBEGIN
 
+// SOLVER DO SUBPROBLEMA DE BENDERS: Primal
 class WorkerPrimal : public Worker
 {
 private:
+    IloEnv env;
     IloModel model;
     IloCplex cplex;
 
@@ -34,6 +36,7 @@ private:
 public:
     explicit WorkerPrimal(const TSCFLInstance &inst_)
         : Worker(inst_),
+          env(),
           model(env),
           cplex(env),
           x(env, inst_.nI, inst_.nJ),
@@ -60,6 +63,7 @@ public:
     {
         cplex.end();
         model.end();
+        env.end();
     }
 
 private:
