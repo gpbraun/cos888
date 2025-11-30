@@ -12,6 +12,15 @@ Gabriel Braun, 2025
 #include "tscfl_solver_cplex.hpp"
 #include "tscfl_solver_benders.hpp"
 
+// [BENDERS] Solved.
+// UB     = 2.61585e+06
+// LB     = 2.58224e+06
+// status = Feasible
+// gap    = 0.0128501
+// nodes  = 3090
+// time   = 30s
+// eta*   = 2.55049e+06
+
 int main()
 {
     const std::string path = "_instances/fernandes/tscfl_050_100_200_c.txt";
@@ -29,7 +38,7 @@ int main()
 
         // 1. BENDERS
         TSCFLSolverBenders solver_benders(inst, 2);
-        solver_benders.solve(true, 100.0);
+        solver_benders.solve(true, 60.0);
     }
     catch (const IloException &e)
     {

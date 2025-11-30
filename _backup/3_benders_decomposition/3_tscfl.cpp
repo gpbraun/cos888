@@ -380,13 +380,13 @@ public:
             // capacidade agregada (garante viabilidade do subproblema)
             {
                 IloExpr e1(env), e2(env);
-                double demand_total = std::accumulate(inst.r.begin(), inst.r.end(), 0.0);
+                double demand_sum = std::accumulate(inst.r.begin(), inst.r.end(), 0.0);
                 for (int i = 0; i < inst.nI; ++i)
                     e1 += inst.p[i] * a[i];
                 for (int j = 0; j < inst.nJ; ++j)
                     e2 += inst.q[j] * b[j];
-                master.add(e1 >= demand_total);
-                master.add(e2 >= demand_total);
+                master.add(e1 >= demand_sum);
+                master.add(e2 >= demand_sum);
                 e1.end();
                 e2.end();
             }

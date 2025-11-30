@@ -27,11 +27,15 @@ ILOSTLBEGIN
 //  CONSTANTES
 // =====================================================================
 
-static const double USERCUT_ABS_VIOL = 1;           // violação mínima absoluta
-static const double USERCUT_REL_VIOL = 1e-3;        // violação mínima relativa
-static const double MAX_FRAC_SUM = 10.0;            // quão fracionária pode ser a solução LP
-static const int MAX_CUTS_PER_NODE = 1;             // máx. cortes por nó (user cuts)
-static const IloInt64 MAX_NODE_INDEX_USER_CUTS = 0; // 0 => só no nó raiz
+static const double USERCUT_MAX_GAP = 1e-4;     // maior gap para gerar user cuts
+static const double USERCUT_ABS_VIOL = 1e-1;    // violação mínima absoluta
+static const double USERCUT_REL_VIOL = 1e-4;    // violação mínima relativa
+static const double MAX_FRAC_SUM = 10.0;        // quão fracionária pode ser a solução LP
+static const int MAX_CUTS_PER_NODE = 1;         // máx. cortes por nó (user cuts)
+static const int MAX_NODE_INDEX_USER_CUTS = 10; // 0 => só no nó raiz
+
+static const double COREPOINT_LAMBDA = 0.5; // passo para atualizar core point externo
+static const double SEPPOINT_LAMBDA = 0.5;  // peso do ponto LP no ponto de separação
 
 // =====================================================================
 //  CALLBACKS
@@ -112,6 +116,13 @@ class UserBendersCallbackI : public IloCplex::UserCutCallbackI
     IloInt64 lastNodeIndex;
     int cutsThisNode;
 
+    // Core point e ponto de separação
+    IloNumArray a_core;
+    IloNumArray b_core;
+    IloNumArray a_sep;
+    IloNumArray b_sep;
+    IloBool core_initialized;
+
 public:
     UserBendersCallbackI(
         const TSCFLInstance &inst_,
@@ -127,9 +138,21 @@ public:
           eta(eta_),
           a_vals(inst_.env, inst_.nI),
           b_vals(inst_.env, inst_.nJ),
+          eta_val(0.0),
           lastNodeIndex(-1),
-          cutsThisNode(0)
+          cutsThisNode(0),
+          a_core(inst_.env, inst_.nI),
+          b_core(inst_.env, inst_.nJ),
+          a_sep(inst_.env, inst_.nI),
+          b_sep(inst_.env, inst_.nJ),
+          core_initialized(IloFalse)
     {
+        // Inicializa core point em 0.5 (interior de [0,1]^n)
+        for (int i = 0; i < inst_.nI; ++i)
+            a_core[i] = 0.5;
+        for (int j = 0; j < inst_.nJ; ++j)
+            b_core[j] = 0.5;
+        core_initialized = IloTrue;
     }
 
     IloCplex::CallbackI *duplicateCallback() const override
@@ -145,10 +168,10 @@ public:
 
         // 1) Limita user cuts a nós "rasos"
         IloInt64 nodeIndex = getNnodes64();
-        if (nodeIndex > MAX_NODE_INDEX_USER_CUTS)
+        if (getMIPRelativeGap() <= USERCUT_MAX_GAP && nodeIndex > MAX_NODE_INDEX_USER_CUTS)
             return;
 
-        // 2) Atualiza controle de cortes por nó
+        // 2) Controle de cortes por nó
         if (nodeIndex != lastNodeIndex)
         {
             lastNodeIndex = nodeIndex;
@@ -162,7 +185,7 @@ public:
         getValues(b_vals, b);
         eta_val = getValue(eta);
 
-        // 4) Evita cortes de soluções muito fracionárias (tendem a ser fracos)
+        // 4) Evita cortes para soluções muito fracionárias (tendem a ser fracos)
         double frac_sum = 0.0;
 
         for (int i = 0; i < inst.nI; ++i)
@@ -170,7 +193,6 @@ public:
             double v = a_vals[i];
             double frac = std::fabs(v - std::round(v));
             frac_sum += std::min(frac, 1.0 - frac);
-
             if (frac_sum > MAX_FRAC_SUM)
                 return;
         }
@@ -179,25 +201,51 @@ public:
             double v = b_vals[j];
             double frac = std::fabs(v - std::round(v));
             frac_sum += std::min(frac, 1.0 - frac);
-
             if (frac_sum > MAX_FRAC_SUM)
                 return;
         }
 
-        // 5) Resolve worker
-        worker.solve(a_vals, b_vals);
+        // 5) Atualiza core point (média entre core e solução LP atual)
+        //    core^{new} = (1-COREPOINT_LAMBDA)*core + COREPOINT_LAMBDA * a_vals
+        if (core_initialized)
+        {
+            for (int i = 0; i < inst.nI; ++i)
+                a_core[i] = (1.0 - COREPOINT_LAMBDA) * a_core[i] + COREPOINT_LAMBDA * a_vals[i];
+            for (int j = 0; j < inst.nJ; ++j)
+                b_core[j] = (1.0 - COREPOINT_LAMBDA) * b_core[j] + COREPOINT_LAMBDA * b_vals[j];
+        }
+        else
+        {
+            for (int i = 0; i < inst.nI; ++i)
+                a_core[i] = a_vals[i];
+            for (int j = 0; j < inst.nJ; ++j)
+                b_core[j] = b_vals[j];
+            core_initialized = IloTrue;
+        }
 
-        // 6) Teste de violação
-        double viol = worker.theta - eta_val;
+        // 6) Define ponto de separação (Magnanti–Wong independente / in-out):
+        //    a_sep = λ * a_vals + (1-λ) * a_core
+        for (int i = 0; i < inst.nI; ++i)
+            a_sep[i] = SEPPOINT_LAMBDA * a_vals[i] + (1.0 - SEPPOINT_LAMBDA) * a_core[i];
+        for (int j = 0; j < inst.nJ; ++j)
+            b_sep[j] = SEPPOINT_LAMBDA * b_vals[j] + (1.0 - SEPPOINT_LAMBDA) * b_core[j];
 
-        double min_viol = std::max(
-            USERCUT_ABS_VIOL, USERCUT_REL_VIOL * std::max(1.0, std::fabs(worker.theta)));
+        // 7) Resolve subproblema no ponto de separação (não no ponto LP!)
+        worker.solve(a_sep, b_sep);
+
+        // 8) Teste de violação avaliado na solução LP (a_vals, b_vals, eta_val)
+        double theta = worker.theta;
+        double viol = theta - eta_val;
+
+        double min_viol = std::max(USERCUT_ABS_VIOL,
+                                   USERCUT_REL_VIOL * std::max(1.0, std::fabs(theta)));
 
         if (viol <= min_viol)
             return;
 
-        // 7) Adiciona user cut
-        IloCplex::CutManagement cm = (nodeIndex == 0 ? IloCplex::UseCutForce : IloCplex::UseCutPurge);
+        // 9) Adiciona user cut
+        IloCplex::CutManagement cm =
+            (nodeIndex == 0 ? IloCplex::UseCutForce : IloCplex::UseCutPurge);
 
         add(eta >= worker.rhs + IloScalProd(worker.coef_a, a) + IloScalProd(worker.coef_b, b), cm);
 

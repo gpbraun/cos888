@@ -113,10 +113,10 @@ public:
         theta = cplex.getObjValue();
 
         for (int i = 0; i < inst.nI; ++i)
-            coef_a[i] = inst.p[i] * cplex.getValue(l1[i]); // ≤ 0
+            coef_a[i] = inst.p[i] * cplex.getValue(l1[i]);
 
         for (int j = 0; j < inst.nJ; ++j)
-            coef_b[j] = inst.q[j] * cplex.getValue(l2[j]); // ≤ 0
+            coef_b[j] = inst.q[j] * cplex.getValue(l2[j]);
 
         rhs = 0.0;
         for (int k = 0; k < inst.nK; ++k)
