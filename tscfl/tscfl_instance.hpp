@@ -75,7 +75,7 @@ public:
 };
 
 // Retorna: produto escalar de uma matrix de constantes e uma matriz de variáveis.
-inline IloExpr IloMatProd(const IloNumMatrix &c, const IloNumVarMatrix &x)
+inline IloExpr IloMatScalProd(const IloNumMatrix &c, const IloNumVarMatrix &x)
 {
     IloEnv env = x.getEnv();
     IloInt nRows = x.getSize();

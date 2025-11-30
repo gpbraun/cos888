@@ -99,7 +99,7 @@ private:
         // FUNÇÃO OBJETIVO
         IloExpr obj_expr(env);
 
-        obj_expr += IloMatProd(inst.c, x) + IloMatProd(inst.d, y);
+        obj_expr += IloMatScalProd(inst.c, x) + IloMatScalProd(inst.d, y);
 
         IloObjective obj = IloMinimize(env, obj_expr);
         model.add(obj);

@@ -27,8 +27,8 @@ private:
     // Parâmetros da rede
     int nN;
     int nA;
-    int node_s; // nó origem (suber‐source)
-    int node_t; // nó destino (suber‐sink)
+    int node_s; // nó origem (super‐source)
+    int node_t; // nó destino (super‐sink)
 
     // Índices de arcos de capacidade que geram l1 e l2
     std::vector<int> arcPlantCap; // arco s -> plant_i

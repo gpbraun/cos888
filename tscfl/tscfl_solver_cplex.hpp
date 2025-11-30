@@ -102,7 +102,7 @@ private:
         // Custos fixos
         obj_expr += IloScalProd(inst.f, a) + IloScalProd(inst.g, b);
         // Custos de fluxo
-        obj_expr += IloMatProd(inst.c, x) + IloMatProd(inst.d, y);
+        obj_expr += IloMatScalProd(inst.c, x) + IloMatScalProd(inst.d, y);
 
         IloObjective obj = IloMinimize(env, obj_expr);
         model.add(obj);
