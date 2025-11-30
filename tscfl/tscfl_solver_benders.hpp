@@ -19,7 +19,7 @@ Gabriel Braun, 2025
 #include "tscfl_instance.hpp"
 #include "benders_workers/tscfl_benders_worker_dual.hpp"
 #include "benders_workers/tscfl_benders_worker_primal.hpp"
-// #include "benders_workers/tscfl_benders_worker_net.hpp"
+#include "benders_workers/tscfl_benders_worker_net.hpp"
 
 ILOSTLBEGIN
 
@@ -196,7 +196,8 @@ public:
             worker = std::make_unique<WorkerPrimal>(inst_);
             break;
         case 2:
-            throw std::invalid_argument("WorkerNet não implementado!");
+            worker = std::make_unique<WorkerNet>(inst_);
+            break;
         default:
             throw std::invalid_argument("Invalid Benders worker mode (must be 0, 1, or 2).");
         }

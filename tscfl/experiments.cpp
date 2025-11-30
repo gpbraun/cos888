@@ -40,8 +40,8 @@ int main()
         // solver_cplex.solve(true, 200.0);
 
         // 1. BENDERS
-        TSCFLSolverBenders solver_benders(inst, 0);
-        solver_benders.solve(true, 300.0);
+        TSCFLSolverBenders solver_benders(inst, 1);
+        solver_benders.solve(true, 20.0);
     }
     catch (const IloException &e)
     {

@@ -1,9 +1,7 @@
 /*
 COS888
 
-WorkerNet: resolve o subproblema primal do TSCFL usando o
-otimizador de redes do CPLEX (RootAlgorithm = Network) e
-constrói o corte de Benders a partir dos duais das restrições.
+WorkerBet: resolve o subproblema de fluxo mínimo do TSCFL para uso na decomposição de Benders.
 
 Gabriel Braun, 2025
 */
@@ -11,7 +9,9 @@ Gabriel Braun, 2025
 #pragma once
 
 #include <ilcplex/ilocplex.h>
+#include <ilcplex/cplex.h>
 #include <stdexcept>
+#include <vector>
 
 #include "tscfl_benders_base_worker.hpp"
 
@@ -20,173 +20,333 @@ ILOSTLBEGIN
 class WorkerNet : public Worker
 {
 private:
-    IloModel model;
-    IloCplex cplex;
+    // Ambiente e problema da C API (CPXNET)
+    CPXENVptr env_cpx{nullptr};
+    CPXNETptr net{nullptr};
 
-    // Variáveis de fluxo
-    IloNumVarMatrix x; // x[i][j] = fluxo planta i -> depósito j
-    IloNumVarMatrix y; // y[j][k] = fluxo depósito j -> cliente k
+    // Dimensões da rede
+    int nnodes{0};
+    int narcs{0};
 
-    // Restrições (na convenção dos duais do WorkerDual)
-    IloRangeArray constr_l1; // constr_l1[i] = capacidade da planta i
-    IloRangeArray constr_l2; // constr_l2[j] = capacidade do depósito j
-    IloRangeArray constr_m1; // constr_m1[j] = balanço de fluxo no depósito j
-    IloRangeArray constr_m2; // constr_m2[k] = demanda do cliente k
+    // Índices especiais de nós
+    int node_s{-1};
+    int node_t{-1};
+
+    // Índices de arcos de capacidade que geram l1 e l2
+    std::vector<int> arcPlantCap; // arco s -> plant_i
+    std::vector<int> arcDepotCap; // arco depotIn_j -> depotOut_j
 
 public:
     explicit WorkerNet(const TSCFLInstance &inst_)
         : Worker(inst_),
-          model(env),
-          cplex(env),
-          x(env, inst_.nI, inst_.nJ),
-          y(env, inst_.nJ, inst_.nK),
-          constr_l1(env, inst_.nI),
-          constr_l2(env, inst_.nJ),
-          constr_m1(env, inst_.nJ),
-          constr_m2(env, inst_.nK)
-    {
-        build_base_model();
-        cplex.extract(model);
-
-        // Parâmetros do CPLEX (subproblema em rede)
-        cplex.setParam(IloCplex::Param::Threads, 1);
-        cplex.setParam(IloCplex::Param::Preprocessing::Reduce, 0);
-        cplex.setParam(IloCplex::Param::RootAlgorithm, IloCplex::Network);
-
-        // Subproblema silencioso por padrão
-        cplex.setOut(env.getNullStream());
-        cplex.setWarning(env.getNullStream());
-    }
-
-    ~WorkerNet() override
-    {
-        cplex.end();
-        model.end();
-    }
-
-private:
-    // Constrói o modelo base do subproblema primal
-    void build_base_model()
+          arcPlantCap(inst_.nI),
+          arcDepotCap(inst_.nJ)
     {
         const int nI = inst.nI;
         const int nJ = inst.nJ;
         const int nK = inst.nK;
 
-        // -----------------------------------------------------------------
-        // RESTRIÇÕES DO SUBPROBLEMA PRIMAL
-        // -----------------------------------------------------------------
+        int status = 0;
 
-        // Capacidade das plantas:
-        //   sum_j x_ij <= p_i a_i
-        // Reescrevemos como:
-        //   -sum_j x_ij >= -p_i a_i
-        // para ficar na forma expr >= LB, com LB dependente de a_i.
+        // ---------------------------------------------------------
+        // 1) Cria ambiente CPX e problema de rede
+        // ---------------------------------------------------------
+        env_cpx = CPXopenCPLEX(&status);
+        if (env_cpx == nullptr || status)
+        {
+            throw std::runtime_error("WorkerNet: failed to open CPX environment.");
+        }
+
+        // desliga saída na tela para o subproblema
+        CPXsetintparam(env_cpx, CPXPARAM_ScreenOutput, CPX_OFF);
+
+        net = CPXNETcreateprob(env_cpx, &status, "tscfl_net");
+        if (status)
+        {
+            CPXcloseCPLEX(&env_cpx);
+            throw std::runtime_error("WorkerNet: failed to create CPXNET problem.");
+        }
+
+        // ---------------------------------------------------------
+        // 2) Define nós e arcos da rede
+        // ---------------------------------------------------------
+        // Nós:
+        //   0                -> s
+        //   1..nI            -> plants
+        //   nI+1 .. nI+nJ    -> depotIn
+        //   nI+nJ+1 .. nI+2nJ-> depotOut
+        //   ...              -> customers
+        //   último           -> t
+        //
+        nnodes = 2 + nI + 2 * nJ + nK;
+        node_s = 0;
+        node_t = nnodes - 1;
+
+        auto nodePlant = [nI](int i)
+        { return 1 + i; };
+        auto nodeDepotIn = [nI](int j)
+        { return 1 + nI + j; };
+        auto nodeDepotOut = [nI, nJ](int j)
+        { return 1 + nI + nJ + j; };
+        auto nodeCust = [nI, nJ](int k)
+        { return 1 + nI + 2 * nJ + k; };
+
+        // Contagem de arcos
+        // s->plant:           nI
+        // plant->depotIn:     nI*nJ
+        // depotIn->depotOut:  nJ
+        // depotOut->cust:     nJ*nK
+        // cust->t:            nK
+        narcs = nI + nI * nJ + nJ + nJ * nK + nK;
+
+        std::vector<int> from(narcs);
+        std::vector<int> to(narcs);
+        std::vector<double> low(narcs, 0.0);
+        std::vector<double> up(narcs, 0.0);
+        std::vector<double> cost(narcs, 0.0);
+
+        // Suprimento dos nós
+        std::vector<double> supply(nnodes, 0.0);
+        double demand_total = 0.0;
+        for (int k = 0; k < nK; ++k)
+            demand_total += inst.r[k];
+
+        supply[node_s] = demand_total;
+        supply[node_t] = -demand_total;
+
+        int arcId = 0;
+
+        // 2.1) Arcos s -> plant_i (capacidade p_i * a_i, custo 0)
         for (int i = 0; i < nI; ++i)
         {
-            constr_l1[i] = IloRange(env, -IloInfinity, -IloSum(x[i]), IloInfinity);
-            model.add(constr_l1[i]);
+            int u = node_s;
+            int v = nodePlant(i);
+
+            from[arcId] = u;
+            to[arcId] = v;
+            low[arcId] = 0.0;
+            up[arcId] = 0.0; // será atualizado em solve()
+            cost[arcId] = 0.0;
+
+            arcPlantCap[i] = arcId;
+            ++arcId;
         }
 
-        // Capacidade dos depósitos:
-        //   sum_k y_jk <= q_j b_j
-        // Reescrito como:
-        //   -sum_k y_jk >= -q_j b_j
+        // 2.2) Arcos plant_i -> depotIn_j (custo c_ij, cap = +inf)
+        for (int i = 0; i < nI; ++i)
+        {
+            int u = nodePlant(i);
+            for (int j = 0; j < nJ; ++j)
+            {
+                int v = nodeDepotIn(j);
+
+                from[arcId] = u;
+                to[arcId] = v;
+                low[arcId] = 0.0;
+                up[arcId] = CPX_INFBOUND;
+                cost[arcId] = inst.c[i][j];
+
+                ++arcId;
+            }
+        }
+
+        // 2.3) Arcos depotIn_j -> depotOut_j (capacidade q_j * b_j, custo 0)
         for (int j = 0; j < nJ; ++j)
         {
-            constr_l2[j] = IloRange(env, -IloInfinity, -IloSum(y[j]), IloInfinity);
-            model.add(constr_l2[j]);
+            int u = nodeDepotIn(j);
+            int v = nodeDepotOut(j);
+
+            from[arcId] = u;
+            to[arcId] = v;
+            low[arcId] = 0.0;
+            up[arcId] = 0.0; // será atualizado em solve()
+            cost[arcId] = 0.0;
+
+            arcDepotCap[j] = arcId;
+            ++arcId;
         }
 
-        // Balanço nos depósitos:
-        //   sum_i x_ij - sum_k y_jk = 0
+        // 2.4) Arcos depotOut_j -> cust_k (custo d_jk, cap = +inf)
         for (int j = 0; j < nJ; ++j)
         {
-            constr_m1[j] = IloRange(env, 0.0, IloSum(x.col(j)) - IloSum(y[j]), 0.0);
-            model.add(constr_m1[j]);
+            int u = nodeDepotOut(j);
+            for (int k = 0; k < nK; ++k)
+            {
+                int v = nodeCust(k);
+
+                from[arcId] = u;
+                to[arcId] = v;
+                low[arcId] = 0.0;
+                up[arcId] = CPX_INFBOUND;
+                cost[arcId] = inst.d[j][k];
+
+                ++arcId;
+            }
         }
 
-        // Demanda dos clientes:
-        //   sum_j y_jk >= r_k
+        // 2.5) Arcos cust_k -> t (capacidade r_k, custo 0)
         for (int k = 0; k < nK; ++k)
         {
-            constr_m2[k] = IloRange(env, inst.r[k], IloSum(y.col(k)), IloInfinity);
-            model.add(constr_m2[k]);
+            int u = nodeCust(k);
+            int v = node_t;
+
+            from[arcId] = u;
+            to[arcId] = v;
+            low[arcId] = 0.0;
+            up[arcId] = inst.r[k];
+            cost[arcId] = 0.0;
+
+            ++arcId;
         }
 
-        // -----------------------------------------------------------------
-        // FUNÇÃO OBJETIVO:
-        //   min sum_{i,j} c_ij x_ij + sum_{j,k} d_jk y_jk
-        // -----------------------------------------------------------------
-        IloExpr obj_expr(env);
-        obj_expr += IloMatProd(inst.c, x) + IloMatProd(inst.d, y);
+        if (arcId != narcs)
+        {
+            CPXNETfreeprob(env_cpx, &net);
+            CPXcloseCPLEX(&env_cpx);
+            throw std::runtime_error("WorkerNet: internal error, arc count mismatch.");
+        }
 
-        IloObjective obj = IloMinimize(env, obj_expr);
-        model.add(obj);
-        obj_expr.end();
+        // 2.6) Adiciona nós e arcos no CPXNET
+        status = CPXNETaddnodes(env_cpx, net, nnodes, supply.data(), nullptr);
+        if (status)
+        {
+            CPXNETfreeprob(env_cpx, &net);
+            CPXcloseCPLEX(&env_cpx);
+            throw std::runtime_error("WorkerNet: CPXNETaddnodes failed.");
+        }
+
+        status = CPXNETaddarcs(env_cpx, net,
+                               narcs,
+                               from.data(), to.data(),
+                               low.data(), up.data(),
+                               cost.data(),
+                               nullptr);
+        if (status)
+        {
+            CPXNETfreeprob(env_cpx, &net);
+            CPXcloseCPLEX(&env_cpx);
+            throw std::runtime_error("WorkerNet: CPXNETaddarcs failed.");
+        }
     }
 
-    // Atualiza o lado direito das restrições que dependem de (a,b)
-    void set_constraints(const IloNumArray &a_vals, const IloNumArray &b_vals)
+    ~WorkerNet() override
     {
-        // Capacidade das plantas:
-        //   -sum_j x_ij >= -p_i a_i
-        for (int i = 0; i < inst.nI; ++i)
-            constr_l1[i].setBounds(-inst.p[i] * a_vals[i], IloInfinity);
-
-        // Capacidade dos depósitos:
-        //   -sum_k y_jk >= -q_j b_j
-        for (int j = 0; j < inst.nJ; ++j)
-            constr_l2[j].setBounds(-inst.q[j] * b_vals[j], IloInfinity);
+        if (env_cpx != nullptr)
+        {
+            if (net != nullptr)
+            {
+                CPXNETfreeprob(env_cpx, &net);
+            }
+            CPXcloseCPLEX(&env_cpx);
+        }
     }
 
 public:
-    // Dado (a_vals, b_vals) da solução atual do mestre, resolve o subproblema.
-    // Atualiza: theta, rhs, coef_a, coef_b
-    //
-    // Corte de Benders:
-    //   eta >= rhs + sum_i coef_a[i] * a_i + sum_j coef_b[j] * b_j
-    //
+    // Resolve o subproblema para (a_vals, b_vals) e
+    // atualiza: theta, coef_a, coef_b, rhs.
     void solve(const IloNumArray &a_vals, const IloNumArray &b_vals) override
     {
-        // 1) Atualiza as restrições que dependem de (a,b)
-        set_constraints(a_vals, b_vals);
+        const int nI = inst.nI;
+        const int nJ = inst.nJ;
+        const int nK = inst.nK;
 
-        // 2) Resolve o LP (com otimizador de rede)
-        if (!cplex.solve())
-            throw std::runtime_error("WorkerNet: CPLEX failed to solve network subproblem.");
+        int status = 0;
 
-        theta = cplex.getObjValue();
+        // ---------------------------------------------------------
+        // 1) Atualiza capacidades dos arcos que dependem de (a,b)
+        //    s->plant_i : cap = p_i * a_i
+        //    depotIn_j->depotOut_j : cap = q_j * b_j
+        // ---------------------------------------------------------
+        int cnt = nI + nJ;
+        std::vector<int> idx(cnt);
+        std::vector<char> lu(cnt, 'U');
+        std::vector<double> bd(cnt);
 
-        // 3) Lê as variáveis duais relevantes:
-        //    l1_i: duais das capacidades das plantas (constr_l1)
-        //    l2_j: duais das capacidades dos depósitos (constr_l2)
-        //    m2_k: duais das demandas dos clientes   (constr_m2)
-        IloNumArray l1(env), l2(env), m2(env);
+        for (int i = 0; i < nI; ++i)
+        {
+            idx[i] = arcPlantCap[i];
+            bd[i] = inst.p[i] * a_vals[i];
+        }
+        for (int j = 0; j < nJ; ++j)
+        {
+            idx[nI + j] = arcDepotCap[j];
+            bd[nI + j] = inst.q[j] * b_vals[j];
+        }
 
-        cplex.getDuals(l1, constr_l1);
-        cplex.getDuals(l2, constr_l2);
-        cplex.getDuals(m2, constr_m2);
+        status = CPXNETchgbds(env_cpx, net, cnt, idx.data(), lu.data(), bd.data());
+        if (status)
+        {
+            throw std::runtime_error("WorkerNet: CPXNETchgbds failed.");
+        }
 
-        // 4) Calcula os coeficientes do corte
+        // ---------------------------------------------------------
+        // 2) Resolve o problema de fluxo mínimo
+        // ---------------------------------------------------------
+        status = CPXNETprimopt(env_cpx, net);
+        if (status)
+        {
+            throw std::runtime_error("WorkerNet: CPXNETprimopt failed.");
+        }
+
+        double objval = 0.0;
+        status = CPXNETgetobjval(env_cpx, net, &objval);
+        if (status)
+        {
+            throw std::runtime_error("WorkerNet: CPXNETgetobjval failed.");
+        }
+        theta = objval;
+
+        // ---------------------------------------------------------
+        // 3) Lê potenciais de nó (pi) e custos reduzidos (dj)
+        // ---------------------------------------------------------
+        std::vector<double> pi(nnodes);
+        std::vector<double> dj(narcs);
+
+        status = CPXNETgetpi(env_cpx, net, pi.data(), 0, nnodes - 1);
+        if (status)
+        {
+            throw std::runtime_error("WorkerNet: CPXNETgetpi failed.");
+        }
+
+        status = CPXNETgetdj(env_cpx, net, dj.data(), 0, narcs - 1);
+        if (status)
+        {
+            throw std::runtime_error("WorkerNet: CPXNETgetdj failed.");
+        }
+
+        // ---------------------------------------------------------
+        // 4) Mapeia duais para cortes de Benders
         //
-        // Plantas:
-        //   -sum_j x_ij >= -p_i a_i  => RHS_i = -p_i a_i
-        // Contribuição dual: sum_i RHS_i * l1_i = sum_i (-p_i a_i) l1_i
-        // => coef_a[i] = d/d a_i [(-p_i a_i) l1_i] = -p_i l1_i
-        for (int i = 0; i < inst.nI; ++i)
-            coef_a[i] = -inst.p[i] * l1[i];
+        //   l1_i  = dj[ arcPlantCap[i] ]
+        //   l2_j  = dj[ arcDepotCap[j] ]
+        //   m2_k  = pi_s - pi_cust(k)
+        //
+        //   coef_a[i] = p_i * l1_i
+        //   coef_b[j] = q_j * l2_j
+        //   rhs       = sum_k r_k * m2_k
+        // ---------------------------------------------------------
+        for (int i = 0; i < nI; ++i)
+        {
+            double l1_i = dj[arcPlantCap[i]];
+            coef_a[i] = inst.p[i] * l1_i;
+        }
 
-        // Depósitos:
-        //   -sum_k y_jk >= -q_j b_j  => coef_b[j] = -q_j l2_j
-        for (int j = 0; j < inst.nJ; ++j)
-            coef_b[j] = -inst.q[j] * l2[j];
+        for (int j = 0; j < nJ; ++j)
+        {
+            double l2_j = dj[arcDepotCap[j]];
+            coef_b[j] = inst.q[j] * l2_j;
+        }
 
-        // Demandas:
-        //   sum_j y_jk >= r_k  => rhs = sum_k r_k m2_k
-        rhs = IloScalProd(inst.r, m2);
+        auto nodeCust = [nI, nJ](int k)
+        { return 1 + nI + 2 * nJ + k; };
 
-        l1.end();
-        l2.end();
-        m2.end();
+        double pi_s = pi[node_s];
+        rhs = 0.0;
+        for (int k = 0; k < nK; ++k)
+        {
+            int node_k = nodeCust(k);
+            double m2_k = pi_s - pi[node_k];
+            rhs += inst.r[k] * m2_k;
+        }
     }
 };

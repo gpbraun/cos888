@@ -1,7 +1,5 @@
 {
-  "editor.rulers": [
-    120
-  ],
+  "editor.rulers": [120],
   "editor.formatOnSave": true,
   "code-runner.runInTerminal": true,
   "code-runner.ignoreSelection": true,
@@ -26,10 +24,14 @@
     "LIBRARY_PATH": "${env:ILOG}/cpoptimizer/lib/x86-64_linux:${env:ILOG}/concert/lib/x86-64_linux:${env:ILOG}/cplex/lib/x86-64_linux:${env:LIBRARY_PATH}"
   },
   "files.associations": {
+    "*.cls": "latex-expl3",
     "*.sty": "latex-expl3",
+    "*.css": "tailwindcss",
+    "*.md": "markdown",
     "iostream": "cpp",
     "unordered_map": "cpp",
     "optional": "cpp",
-    "variant": "cpp"
-  },
+    "variant": "cpp",
+    "stdexcept": "cpp"
+  }
 }
