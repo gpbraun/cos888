@@ -11,15 +11,7 @@ Gabriel Braun, 2025
 #include "tscfl_instance.hpp"
 #include "tscfl_solver_cplex.hpp"
 #include "tscfl_solver_benders.hpp"
-
-// [BENDERS] Solved.
-// UB     = 2.61585e+06
-// LB     = 2.58224e+06
-// status = Feasible
-// gap    = 0.0128501
-// nodes  = 3090
-// time   = 30s
-// eta*   = 2.55049e+06
+#include "tscfl_solver_cg.hpp"
 
 int main()
 {
@@ -36,9 +28,13 @@ int main()
         // TSCFLSolverCplex solver_cplex(inst);
         // solver_cplex.solve(true, 200.0);
 
-        // 1. BENDERS
-        TSCFLSolverBenders solver_benders(inst, 2);
-        solver_benders.solve(true, 60.0);
+        // 1. COLUNAS
+        TSCFLSolverColumnGeneration solver_benders(inst);
+        solver_benders.solve(true, 100.0);
+
+        // 3. BENDERS
+        // TSCFLSolverBenders solver_benders(inst, 2);
+        // solver_benders.solve(true, 60.0);
     }
     catch (const IloException &e)
     {

@@ -133,7 +133,7 @@ public:
         theta = cplex.getObjValue();
 
         // 3) Lê as variáveis duais
-        IloNumArray l1(env), l2(env), m2(env);
+        IloNumArray l1(env, inst.nI), l2(env, inst.nJ), m2(env, inst.nK);
         cplex.getDuals(l1, constr_l1);
         cplex.getDuals(l2, constr_l2);
         cplex.getDuals(m2, constr_m2);

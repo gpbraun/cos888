@@ -223,8 +223,7 @@ public:
             core_initialized = IloTrue;
         }
 
-        // 6) Define ponto de separação (Magnanti–Wong independente / in-out):
-        //    a_sep = λ * a_vals + (1-λ) * a_core
+        // 6) Define ponto de separação
         for (int i = 0; i < inst.nI; ++i)
             a_sep[i] = SEPPOINT_LAMBDA * a_vals[i] + (1.0 - SEPPOINT_LAMBDA) * a_core[i];
         for (int j = 0; j < inst.nJ; ++j)
@@ -237,8 +236,7 @@ public:
         double theta = worker.theta;
         double viol = theta - eta_val;
 
-        double min_viol = std::max(USERCUT_ABS_VIOL,
-                                   USERCUT_REL_VIOL * std::max(1.0, std::fabs(theta)));
+        double min_viol = std::max(USERCUT_ABS_VIOL, USERCUT_REL_VIOL * std::max(1.0, std::fabs(theta)));
 
         if (viol <= min_viol)
             return;
@@ -265,8 +263,8 @@ public:
 
     // Resultados:
     double lb{0.0};
-    double ub{0.0};
-    double gap{0.0};
+    double ub{IloInfinity};
+    double gap{IloInfinity};
     double time{0.0};
     IloInt64 nodes{0};
     IloAlgorithm::Status status{IloAlgorithm::Unknown};

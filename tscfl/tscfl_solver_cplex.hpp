@@ -24,8 +24,8 @@ public:
 
     // Resultados:
     double lb{0.0};
-    double ub{0.0};
-    double gap{0.0};
+    double ub{IloInfinity};
+    double gap{IloInfinity};
     double time{0.0};
     IloInt64 nodes{0};
     IloAlgorithm::Status status{IloAlgorithm::Unknown};
