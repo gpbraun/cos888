@@ -17,6 +17,7 @@ Gabriel Braun, 2025
 
 ILOSTLBEGIN
 
+// SOLVER DO SUBPROBLEMA DE BENDERS: Problema de fluxo mínimo
 class WorkerNet : public Worker
 {
 private:
@@ -87,12 +88,12 @@ private:
         const int nK = inst.nK;
 
         // Nós:
-        //   0                 -> s
-        //   1..nI             -> plants
-        //   nI+1 .. nI+nJ     -> depotIn
-        //   nI+nJ+1 .. nI+2nJ -> depotOut
-        //   ...               -> customers
-        //   último            -> t
+        //   0                 (s)
+        //   1..nI             (plants)
+        //   nI+1 .. nI+nJ     (depotIn)
+        //   nI+nJ+1 .. nI+2nJ (depotOut)
+        //   ...               (customers)
+        //   último            (t)
         nN = 2 + nI + 2 * nJ + nK;
         node_s = 0;
         node_t = nN - 1;
@@ -110,11 +111,11 @@ private:
         { return 1 + nI + 2 * nJ + k; };
 
         // Contagem de arcos:
-        //   s -> plant:           nI
-        //   plant -> depotIn:     nI*nJ
-        //   depotIn -> depotOut:  nJ
-        //   depotOut -> customer: nJ*nK
-        //   customer -> t:        nK
+        //   s -> plant:           (nI)
+        //   plant -> depotIn:     (nI*nJ)
+        //   depotIn -> depotOut:  (nJ)
+        //   depotOut -> customer: (nJ*nK)
+        //   customer -> t:        (nK)
         nA = nI + nI * nJ + nJ + nJ * nK + nK;
 
         std::vector<int> from(nA);

@@ -14,7 +14,7 @@ Gabriel Braun, 2025
 
 int main()
 {
-    const std::string path = "_instances/fernandes/tscfl_050_100_200_a.txt";
+    const std::string path = "_instances/fernandes/tscfl_050_100_200_c.txt";
 
     IloEnv env;
     int status = 0;
@@ -28,8 +28,8 @@ int main()
         // solver_cplex.solve(true, 200.0);
 
         // 1. BENDERS
-        TSCFLSolverBenders solver_benders(inst, 1);
-        solver_benders.solve(true, 10.0);
+        TSCFLSolverBenders solver_benders(inst, 2);
+        solver_benders.solve(true, 100.0);
     }
     catch (const IloException &e)
     {

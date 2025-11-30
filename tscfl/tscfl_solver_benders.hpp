@@ -23,6 +23,20 @@ Gabriel Braun, 2025
 
 ILOSTLBEGIN
 
+// =====================================================================
+//  CONSTANTES
+// =====================================================================
+
+static const double USERCUT_ABS_VIOL = 1;           // violação mínima absoluta
+static const double USERCUT_REL_VIOL = 1e-3;        // violação mínima relativa
+static const double MAX_FRAC_SUM = 10.0;            // quão fracionária pode ser a solução LP
+static const int MAX_CUTS_PER_NODE = 1;             // máx. cortes por nó (user cuts)
+static const IloInt64 MAX_NODE_INDEX_USER_CUTS = 0; // 0 => só no nó raiz
+
+// =====================================================================
+//  CALLBACKS
+// =====================================================================
+
 // CALLBACK: Lazy Constraint
 class LazyBendersCallbackI : public IloCplex::LazyConstraintCallbackI
 {
@@ -34,6 +48,7 @@ class LazyBendersCallbackI : public IloCplex::LazyConstraintCallbackI
 
     IloNumArray a_vals;
     IloNumArray b_vals;
+    IloNum eta_val;
 
 public:
     LazyBendersCallbackI(
@@ -49,7 +64,8 @@ public:
           b(b_),
           eta(eta_),
           a_vals(inst_.env, inst_.nI),
-          b_vals(inst_.env, inst_.nJ)
+          b_vals(inst_.env, inst_.nJ),
+          eta_val(0)
     {
     }
 
@@ -60,18 +76,21 @@ public:
 
     void main() override
     {
-        // 1) Lê (a, b) da solução corrente de uma vez
+        // 1) Lê (a, b, eta) da solução corrente
         getValues(a_vals, a);
         getValues(b_vals, b);
-        double eta_val = getValue(eta);
+        eta_val = getValue(eta);
 
         // 2) Resolve worker
         worker.solve(a_vals, b_vals);
 
-        // 3) Se corte violado, adiciona lazy cut
-        if (!(worker.theta - eta_val > EPS))
+        // 3) Testa violação
+        double viol = worker.theta - eta_val;
+
+        if (viol <= EPS)
             return;
 
+        // 4) Adiciona lazy cut
         add(eta >= worker.rhs + IloScalProd(worker.coef_a, a) + IloScalProd(worker.coef_b, b));
     }
 };
@@ -87,6 +106,11 @@ class UserBendersCallbackI : public IloCplex::UserCutCallbackI
 
     IloNumArray a_vals;
     IloNumArray b_vals;
+    IloNum eta_val;
+
+    // Controle de cortes por nó
+    IloInt64 lastNodeIndex;
+    int cutsThisNode;
 
 public:
     UserBendersCallbackI(
@@ -102,7 +126,9 @@ public:
           b(b_),
           eta(eta_),
           a_vals(inst_.env, inst_.nI),
-          b_vals(inst_.env, inst_.nJ)
+          b_vals(inst_.env, inst_.nJ),
+          lastNodeIndex(-1),
+          cutsThisNode(0)
     {
     }
 
@@ -113,25 +139,75 @@ public:
 
     void main() override
     {
+        // 0) Só depois do cut loop
         if (!isAfterCutLoop())
             return;
 
-        // 1) Lê (a, b, eta) da solução LP
-        getValues(a_vals, a);
-        getValues(b_vals, b);
-        double eta_val = getValue(eta);
-
-        // 2) Resolve worker
-        worker.solve(a_vals, b_vals);
-
-        // 3) Se corte violado, adiciona user cut
-        if (!(worker.theta - eta_val > EPS))
+        // 1) Limita user cuts a nós "rasos"
+        IloInt64 nodeIndex = getNnodes64();
+        if (nodeIndex > MAX_NODE_INDEX_USER_CUTS)
             return;
 
-        add(eta >= worker.rhs + IloScalProd(worker.coef_a, a) + IloScalProd(worker.coef_b, b),
-            IloCplex::UseCutPurge);
+        // 2) Atualiza controle de cortes por nó
+        if (nodeIndex != lastNodeIndex)
+        {
+            lastNodeIndex = nodeIndex;
+            cutsThisNode = 0;
+        }
+        if (cutsThisNode >= MAX_CUTS_PER_NODE)
+            return;
+
+        // 3) Lê (a, b, eta) da solução corrente
+        getValues(a_vals, a);
+        getValues(b_vals, b);
+        eta_val = getValue(eta);
+
+        // 4) Evita cortes de soluções muito fracionárias (tendem a ser fracos)
+        double frac_sum = 0.0;
+
+        for (int i = 0; i < inst.nI; ++i)
+        {
+            double v = a_vals[i];
+            double frac = std::fabs(v - std::round(v));
+            frac_sum += std::min(frac, 1.0 - frac);
+
+            if (frac_sum > MAX_FRAC_SUM)
+                return;
+        }
+        for (int j = 0; j < inst.nJ; ++j)
+        {
+            double v = b_vals[j];
+            double frac = std::fabs(v - std::round(v));
+            frac_sum += std::min(frac, 1.0 - frac);
+
+            if (frac_sum > MAX_FRAC_SUM)
+                return;
+        }
+
+        // 5) Resolve worker
+        worker.solve(a_vals, b_vals);
+
+        // 6) Teste de violação
+        double viol = worker.theta - eta_val;
+
+        double min_viol = std::max(
+            USERCUT_ABS_VIOL, USERCUT_REL_VIOL * std::max(1.0, std::fabs(worker.theta)));
+
+        if (viol <= min_viol)
+            return;
+
+        // 7) Adiciona user cut
+        IloCplex::CutManagement cm = (nodeIndex == 0 ? IloCplex::UseCutForce : IloCplex::UseCutPurge);
+
+        add(eta >= worker.rhs + IloScalProd(worker.coef_a, a) + IloScalProd(worker.coef_b, b), cm);
+
+        ++cutsThisNode;
     }
 };
+
+// =====================================================================
+//  SOLVER
+// =====================================================================
 
 // SOLVER TSCFL: Decomposição de Benders
 class TSCFLSolverBenders

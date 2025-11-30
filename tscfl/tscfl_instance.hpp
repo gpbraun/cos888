@@ -21,9 +21,9 @@ ILOSTLBEGIN
 // =====================================================================
 
 // Tolerância numérica
-inline constexpr double EPS = 1e-6;
+inline constexpr double EPS = 1e-3;
 // Gap mínimo
-inline constexpr double MIP_GAP = 1e-6;
+inline constexpr double MIP_GAP = 1e-7;
 
 // =====================================================================
 //  UTILS
@@ -88,7 +88,7 @@ inline IloExpr IloMatScalProd(const IloNumMatrix &c, const IloNumVarMatrix &x)
 }
 
 // =====================================================================
-//  Instância
+//  INSTÂNCIA
 // =====================================================================
 
 // INSTÂNCIA TSCFL
@@ -129,7 +129,7 @@ public:
     {
         std::ifstream in(path);
         if (!in)
-            throw std::runtime_error("Cannot open instance: " + path);
+            throw std::runtime_error("Erro de leitura: " + path);
 
         std::vector<double> a;
         a.reserve(1 << 20);
@@ -139,7 +139,7 @@ public:
 
         const int len = static_cast<int>(a.size());
         if (len < 3)
-            throw std::runtime_error("Malformed file (header too short).");
+            throw std::runtime_error("Erro no arquivo da instância (header).");
 
         int pos = 0;
         int nI = static_cast<int>(a[pos++]);
@@ -150,14 +150,14 @@ public:
 
         // r: nK
         if (pos + nK > len)
-            throw std::runtime_error("Malformed file (r).");
+            throw std::runtime_error("Erro no arquivo da instância (r).");
 
         for (int k = 0; k < nK; ++k)
             inst.r[k] = a[pos++];
 
         // (q, g): nJ pares
         if (pos + 2 * nJ > len)
-            throw std::runtime_error("Malformed file (q,g).");
+            throw std::runtime_error("Erro no arquivo da instância (q,g).");
 
         for (int j = 0; j < nJ; ++j)
         {
@@ -168,7 +168,7 @@ public:
         // c: nI * nJ
         const int nIJ = nI * nJ;
         if (pos + nIJ > len)
-            throw std::runtime_error("Malformed file (c).");
+            throw std::runtime_error("Erro no arquivo da instância (c).");
 
         for (int i = 0; i < nI; ++i)
         {
@@ -178,7 +178,7 @@ public:
 
         // (p, f): nI pares
         if (pos + 2 * nI > len)
-            throw std::runtime_error("Malformed file (p,f).");
+            throw std::runtime_error("Erro no arquivo da instância (p,f).");
 
         for (int i = 0; i < nI; ++i)
         {
@@ -189,7 +189,7 @@ public:
         // d: nJ * nK
         const int nJK = nJ * nK;
         if (pos + nJK > len)
-            throw std::runtime_error("Malformed file (d).");
+            throw std::runtime_error("Erro no arquivo da instância (d).");
 
         for (int j = 0; j < nJ; ++j)
             for (int k = 0; k < nK; ++k)

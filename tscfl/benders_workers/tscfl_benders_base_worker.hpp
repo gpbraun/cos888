@@ -14,6 +14,7 @@ Gabriel Braun, 2025
 
 ILOSTLBEGIN
 
+// SOLVER DO SUBPROBLEMA DE BENDERS: Base
 class Worker
 {
 public:
