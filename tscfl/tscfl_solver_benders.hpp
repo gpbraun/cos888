@@ -8,20 +8,7 @@ Gabriel Braun, 2025
 
 #pragma once
 
-#include <ilcplex/ilocplex.h>
-#include <iostream>
-#include <numeric>
-#include <string>
-#include <chrono>
-#include <memory>
-#include <stdexcept>
-
-#include "tscfl_instance.hpp"
-#include "subproblem/tscfl_subproblem_dual.hpp"
-#include "subproblem/tscfl_subproblem_primal.hpp"
-#include "subproblem/tscfl_subproblem_net.hpp"
-
-ILOSTLBEGIN
+#include "utils/utils.hpp"
 
 static const double USERCUT_MAX_GAP = 1e-4;     // maior gap para gerar user cuts
 static const double USERCUT_ABS_VIOL = 1e-1;    // violação mínima absoluta
@@ -248,10 +235,11 @@ public:
 // SOLVER TSCFL: Decomposição de Benders
 class TSCFLSolverBenders
 {
-public:
+protected:
     IloEnv &env;
     const TSCFLInstance &inst;
 
+public:
     // Resultados:
     double lb{0.0};
     double ub{IloInfinity};
@@ -263,27 +251,24 @@ public:
 private:
     IloModel master;
     IloCplex cplex;
+    std::unique_ptr<Subproblem> subproblem;
 
     IloBoolVarArray a; // a_i  = abre planta i
     IloBoolVarArray b; // b_j  = abre depósito j
     IloNumVar eta;     // custo de segundo estágio
 
-    std::unique_ptr<Subproblem> subproblem;
-
 public:
-    // mode:
-    // 0 -> SubproblemDual  (default)
-    // 1 -> SubproblemPrimal
-    // 2 -> SubproblemNet
-    explicit TSCFLSolverBenders(const TSCFLInstance &inst_, int mode = 0)
+    explicit TSCFLSolverBenders(
+        const TSCFLInstance &inst_,
+        Subproblem::Mode smode = Subproblem::Mode::NET)
         : env(inst_.env),
           inst(inst_),
           master(inst_.env),
           cplex(inst_.env),
+          subproblem(Subproblem::create(inst_, smode)),
           a(inst_.env, inst_.nI),
           b(inst_.env, inst_.nJ),
-          eta(inst_.env, 0.0, IloInfinity, ILOFLOAT),
-          subproblem(nullptr)
+          eta(inst_.env, 0.0, IloInfinity, ILOFLOAT)
     {
         build_master();
         cplex.extract(master);
@@ -291,21 +276,6 @@ public:
         // Parâmetros CPLEX (mestre)
         cplex.setParam(IloCplex::Param::Threads, 1);
         cplex.setParam(IloCplex::Param::MIP::Strategy::Search, IloCplex::Traditional);
-
-        switch (mode)
-        {
-        case 0:
-            subproblem = std::make_unique<SubproblemDual>(inst_);
-            break;
-        case 1:
-            subproblem = std::make_unique<SubproblemPrimal>(inst_);
-            break;
-        case 2:
-            subproblem = std::make_unique<SubproblemNet>(inst_);
-            break;
-        default:
-            throw std::invalid_argument("Subproblem inválido (deve ser 0, 1, or 2).");
-        }
     }
 
     ~TSCFLSolverBenders()
@@ -328,6 +298,7 @@ private:
     }
 
 public:
+    // Método principal
     bool solve(bool log_output = true, double time_limit = -1.0)
     {
         if (log_output)

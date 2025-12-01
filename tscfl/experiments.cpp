@@ -8,11 +8,11 @@ Gabriel Braun, 2025
 
 #include <iostream>
 
-#include "tscfl_instance.hpp"
-#include "tscfl_solver_cplex.hpp"
-#include "tscfl_solver_benders.hpp"
+// #include "tscfl_instance.hpp"
+// #include "tscfl_solver_cplex.hpp"
 #include "tscfl_solver_cg.hpp"
-#include "tscfl_solver_rc.hpp"
+#include "tscfl_solver_benders.hpp"
+#include "tscfl_solver_subgradient.hpp"
 
 int main()
 {
@@ -30,15 +30,15 @@ int main()
         // solver_cplex.solve(true, 200.0);
 
         // 1. COLUNAS
-        // TSCFLSolverColumnGeneration solver_cg(inst);
-        // solver_cg.solve(true, 100.0);
+        TSCFLSolverColumnGeneration solver_cg(inst);
+        solver_cg.solve(true, 100.0);
 
         // 2. RELAX-AND-CUT
-        TSCFLSolverRelaxAndCut solver_rc(inst, 0);
-        solver_rc.solve(true, 100.0);
+        // TSCFLSolverSubgradient solver_rc(inst);
+        // solver_rc.solve(true, 100.0);
 
         // 3. BENDERS
-        // TSCFLSolverBenders solver_benders(inst, 2);
+        // TSCFLSolverBenders solver_benders(inst, Subproblem::Mode::NET);
         // solver_benders.solve(true, 60.0);
     }
     catch (const IloException &e)

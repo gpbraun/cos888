@@ -1,24 +1,16 @@
 /*
 COS888
 
-Resolve a relaxação linear do TSCFL por geração de colunas
-(Dantzig–Wolfe por cliente).
+Resolve a relaxação linear do TSCFL por geração de colunas (Dantzig–Wolfe por cliente).
 
 Gabriel Braun, 2025
 */
 
 #pragma once
 
-#include <ilcplex/ilocplex.h>
-#include <chrono>
-#include <iostream>
-#include <limits>
-#include <vector>
-#include <cmath>
-
-#include "tscfl_instance.hpp"
-
-ILOSTLBEGIN
+#include "utils/utils.hpp"
+// Se Subproblem não estiver visível via utils.hpp, incluir o header adequado:
+// #include "utils/subproblem/subproblem.hpp"
 
 class TSCFLSolverColumnGeneration
 {
@@ -33,15 +25,18 @@ public:
     double time{0.0};
     IloAlgorithm::Status status{IloAlgorithm::Unknown};
 
+    // Melhor solução primal encontrada
+    IloNumArray a;
+    IloNumArray b;
+
 private:
     IloModel rmp;
     IloCplex cplex;
     IloObjective obj;
 
     // Variáveis do RMP:
-    // a[i], b[j] são relaxadas (contínuas em [0,1]), mas mantemos a nomenclatura.
-    IloNumVarArray a; // a[i] = abre planta i (relaxado)
-    IloNumVarArray b; // b[j] = abre depósito j (relaxado)
+    IloNumVarArray var_a;
+    IloNumVarArray var_b;
 
     // z[k][t] = coluna t do cliente k (padrão planta–depósito).
     std::vector<IloNumVarArray> z;
@@ -60,18 +55,23 @@ private:
     IloRangeArray constr_m1; // balanço nos depósitos (NÃO usado no RMP DW)
     IloRangeArray constr_m2; // demanda/convexidade dos clientes (dual: m2)
 
+    // NOVO: solver do subproblema, usado para heurística primal
+    std::unique_ptr<Subproblem> subproblem;
+
 public:
     explicit TSCFLSolverColumnGeneration(const TSCFLInstance &inst_)
         : inst(inst_),
           rmp(inst_.env),
           cplex(inst_.env),
           obj(inst_.env),
-          a(inst_.env, inst_.nI),
-          b(inst_.env, inst_.nJ),
+          var_a(inst_.env, inst_.nI),
+          var_b(inst_.env, inst_.nJ),
           constr_l1(inst_.env, inst_.nI),
           constr_l2(inst_.env, inst_.nJ),
           constr_m1(inst_.env), // não usado aqui
-          constr_m2(inst_.env, inst_.nK)
+          constr_m2(inst_.env, inst_.nK),
+          // NOVO: cria o subproblema (modo a seu critério: PRIMAL ou NET)
+          subproblem(Subproblem::create(inst_, Subproblem::Mode::NET))
     {
         IloEnv &env = inst.env;
 
@@ -111,24 +111,24 @@ private:
 
         // Variáveis a[i] e b[j] relaxadas em [0,1]
         for (int i = 0; i < inst.nI; ++i)
-            a[i] = IloNumVar(env, 0.0, 1.0, ILOFLOAT);
+            var_a[i] = IloNumVar(env, 0.0, 1.0, ILOFLOAT);
         for (int j = 0; j < inst.nJ; ++j)
-            b[j] = IloNumVar(env, 0.0, 1.0, ILOFLOAT);
+            var_b[j] = IloNumVar(env, 0.0, 1.0, ILOFLOAT);
 
-        rmp.add(a);
-        rmp.add(b);
+        rmp.add(var_a);
+        rmp.add(var_b);
 
         // Custos fixos
         for (int i = 0; i < inst.nI; ++i)
-            obj.setLinearCoef(a[i], inst.f[i]);
+            obj.setLinearCoef(var_a[i], inst.f[i]);
         for (int j = 0; j < inst.nJ; ++j)
-            obj.setLinearCoef(b[j], inst.g[j]);
+            obj.setLinearCoef(var_b[j], inst.g[j]);
 
         // Restrição de capacidade das plantas: constr_l1[i]
         for (int i = 0; i < inst.nI; ++i)
         {
             IloExpr e(env);
-            e -= inst.p[i] * a[i];
+            e -= inst.p[i] * var_a[i];
             constr_l1[i] = (e <= 0.0);
             rmp.add(constr_l1[i]);
             e.end();
@@ -138,7 +138,7 @@ private:
         for (int j = 0; j < inst.nJ; ++j)
         {
             IloExpr e(env);
-            e -= inst.q[j] * b[j];
+            e -= inst.q[j] * var_b[j];
             constr_l2[j] = (e <= 0.0);
             rmp.add(constr_l2[j]);
             e.end();
@@ -284,91 +284,6 @@ private:
         col_info[k].push_back({i, j});
     }
 
-    // Heurística primal: constrói (a,b,x,y) viáveis a partir de z e atualiza UB.
-    void run_heuristic_from_rmp()
-    {
-        IloEnv &env = inst.env;
-
-        // Reconstruir fluxos x[i][j] e y[j][k] a partir de z[k][t].
-        IloNumMatrix x(env, inst.nI, inst.nJ);
-        IloNumMatrix y(env, inst.nJ, inst.nK);
-
-        for (int i = 0; i < inst.nI; ++i)
-            for (int j = 0; j < inst.nJ; ++j)
-                x[i][j] = 0.0;
-
-        for (int j = 0; j < inst.nJ; ++j)
-            for (int k = 0; k < inst.nK; ++k)
-                y[j][k] = 0.0;
-
-        // Percorre z[k][t] e acumula fluxo = z_{k,t} * r_k
-        for (int k = 0; k < inst.nK; ++k)
-        {
-            int ncols = z[k].getSize();
-            double rk = inst.r[k];
-
-            for (int t = 0; t < ncols; ++t)
-            {
-                double zval = cplex.getValue(z[k][t]);
-                if (zval <= EPS)
-                    continue;
-
-                int i = col_info[k][t].i;
-                int j = col_info[k][t].j;
-
-                double flow = zval * rk;
-                x[i][j] += flow;
-                y[j][k] += flow;
-            }
-        }
-
-        // Determina a[i] e b[j] inteiros a partir dos fluxos.
-        std::vector<double> a_heur(inst.nI, 0.0);
-        std::vector<double> b_heur(inst.nJ, 0.0);
-
-        for (int i = 0; i < inst.nI; ++i)
-        {
-            double total_out = 0.0;
-            for (int j = 0; j < inst.nJ; ++j)
-                total_out += x[i][j];
-            if (total_out > EPS)
-                a_heur[i] = 1.0;
-        }
-
-        for (int j = 0; j < inst.nJ; ++j)
-        {
-            double total_out = 0.0;
-            for (int k = 0; k < inst.nK; ++k)
-                total_out += y[j][k];
-            if (total_out > EPS)
-                b_heur[j] = 1.0;
-        }
-
-        // Calcula o custo da solução heurística.
-        double cost_fix = 0.0;
-        for (int i = 0; i < inst.nI; ++i)
-            cost_fix += inst.f[i] * a_heur[i];
-        for (int j = 0; j < inst.nJ; ++j)
-            cost_fix += inst.g[j] * b_heur[j];
-
-        double cost_flow = 0.0;
-        for (int i = 0; i < inst.nI; ++i)
-            for (int j = 0; j < inst.nJ; ++j)
-                cost_flow += inst.c[i][j] * x[i][j];
-        for (int j = 0; j < inst.nJ; ++j)
-            for (int k = 0; k < inst.nK; ++k)
-                cost_flow += inst.d[j][k] * y[j][k];
-
-        double ub_cand = cost_fix + cost_flow;
-
-        if (ub_cand + 1e-6 < ub)
-        {
-            ub = ub_cand;
-            // Se quiser, aqui poderíamos armazenar (a_heur, b_heur, x, y)
-            // em membros da classe para recuperar a melhor solução primal.
-        }
-    }
-
 public:
     bool solve(bool log_output = true, double time_limit = -1.0)
     {
@@ -391,6 +306,9 @@ public:
 
         bool converged = false;
         double last_rmp_value = IloInfinity;
+
+        auto &SP = *subproblem;
+        IloNumArray a_h(env, inst.nI), b_h(env, inst.nJ);
 
         while (true)
         {
@@ -426,8 +344,12 @@ public:
             last_rmp_value = z_rmp;
             lp_ub = z_rmp;
 
-            // Atualiza heurística primal (UB do inteiro)
-            run_heuristic_from_rmp();
+            // Resolve a heurística primal periodicamente
+            IloNum z_h = SP.solve_primal_heuristic(cplex, var_a, var_b, a_h, b_h);
+            if (z_h + EPS < ub)
+            {
+                ub = z_h;
+            }
 
             // Recupera duais do RMP:
             IloNumArray l1(env, inst.nI), l2(env, inst.nJ), m2(env, inst.nK);
