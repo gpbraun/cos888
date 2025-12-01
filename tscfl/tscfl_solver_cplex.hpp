@@ -20,6 +20,7 @@ ILOSTLBEGIN
 class TSCFLSolverCplex
 {
 public:
+    IloEnv &env;
     const TSCFLInstance &inst;
 
     // Resultados:
@@ -41,7 +42,8 @@ private:
 
 public:
     explicit TSCFLSolverCplex(const TSCFLInstance &inst_)
-        : inst(inst_),
+        : env(inst_.env),
+          inst(inst_),
           model(inst_.env),
           cplex(inst_.env),
           a(inst_.env, inst_.nI),
@@ -68,8 +70,6 @@ public:
 private:
     void build_model()
     {
-        IloEnv &env = inst.env;
-
         // RESTRIÇÕES
         // Capacidade das plantas
         for (int i = 0; i < inst.nI; ++i)
@@ -99,9 +99,9 @@ private:
         // FUNÇÃO OBJETIVO
         IloExpr obj_expr(env);
 
-        // Custos fixos
+        // custo fixo
         obj_expr += IloScalProd(inst.f, a) + IloScalProd(inst.g, b);
-        // Custos de fluxo
+        // custo variável
         obj_expr += IloMatScalProd(inst.c, x) + IloMatScalProd(inst.d, y);
 
         IloObjective obj = IloMinimize(env, obj_expr);
@@ -112,8 +112,6 @@ private:
 public:
     bool solve(bool log_output = true, double time_limit = -1.0)
     {
-        IloEnv &env = inst.env;
-
         // Controle de log
         if (log_output)
         {

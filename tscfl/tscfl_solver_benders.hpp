@@ -17,15 +17,11 @@ Gabriel Braun, 2025
 #include <stdexcept>
 
 #include "tscfl_instance.hpp"
-#include "workers/tscfl_worker_dual.hpp"
-#include "workers/tscfl_worker_primal.hpp"
-#include "workers/tscfl_worker_net.hpp"
+#include "utils/tscfl_worker_dual.hpp"
+#include "utils/tscfl_worker_primal.hpp"
+#include "utils/tscfl_worker_net.hpp"
 
 ILOSTLBEGIN
-
-// =====================================================================
-//  CONSTANTES
-// =====================================================================
 
 static const double USERCUT_MAX_GAP = 1e-4;     // maior gap para gerar user cuts
 static const double USERCUT_ABS_VIOL = 1e-1;    // violação mínima absoluta
@@ -36,10 +32,6 @@ static const int MAX_NODE_INDEX_USER_CUTS = 10; // 0 => só no nó raiz
 
 static const double COREPOINT_LAMBDA = 0.5; // passo para atualizar core point externo
 static const double SEPPOINT_LAMBDA = 0.5;  // peso do ponto LP no ponto de separação
-
-// =====================================================================
-//  CALLBACKS
-// =====================================================================
 
 // CALLBACK: Lazy Constraint
 class LazyBendersCallbackI : public IloCplex::LazyConstraintCallbackI
@@ -251,14 +243,11 @@ public:
     }
 };
 
-// =====================================================================
-//  SOLVER
-// =====================================================================
-
 // SOLVER TSCFL: Decomposição de Benders
 class TSCFLSolverBenders
 {
 public:
+    IloEnv &env;
     const TSCFLInstance &inst;
 
     // Resultados:
@@ -285,7 +274,8 @@ public:
     // 1 -> WorkerPrimal
     // 2 -> WorkerNet
     explicit TSCFLSolverBenders(const TSCFLInstance &inst_, int mode = 0)
-        : inst(inst_),
+        : env(inst_.env),
+          inst(inst_),
           master(inst_.env),
           cplex(inst_.env),
           a(inst_.env, inst_.nI),
@@ -312,7 +302,7 @@ public:
             worker = std::make_unique<WorkerNet>(inst_);
             break;
         default:
-            throw std::invalid_argument("Invalid Benders worker mode (must be 0, 1, or 2).");
+            throw std::invalid_argument("Worker inválido (deve ser 0, 1, or 2).");
         }
     }
 
@@ -325,8 +315,6 @@ public:
 private:
     void build_master()
     {
-        IloEnv &env = inst.env;
-
         // Capacidade agregada (garante viabilidade do subproblema)
         double demand_sum = IloSum(inst.r);
         master.add(IloScalProd(inst.p, a) >= demand_sum);
@@ -340,8 +328,6 @@ private:
 public:
     bool solve(bool log_output = true, double time_limit = -1.0)
     {
-        IloEnv &env = inst.env;
-
         if (log_output)
         {
             cplex.setOut(env.out());

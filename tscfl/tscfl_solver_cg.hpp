@@ -500,7 +500,7 @@ public:
         // gap só faz sentido se tivermos LB finito e UB finito
         if (ub < IloInfinity && lb > -IloInfinity)
         {
-            double denom = std::max(1.0, std::abs(ub));
+            double denom = std::max(1.0, std::fabs(ub));
             gap = (ub - lb) / denom;
         }
         else

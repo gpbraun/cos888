@@ -17,13 +17,11 @@ Gabriel Braun, 2025
 ILOSTLBEGIN
 
 // =====================================================================
-//  CONSTANTES
+//  CONSTANTES GLOBAIS
 // =====================================================================
 
-// Tolerância numérica
-inline constexpr double EPS = 1e-3;
-// Gap mínimo
-inline constexpr double MIP_GAP = 1e-7;
+inline constexpr double EPS = 1e-4;     // Tolerância numérica
+inline constexpr double MIP_GAP = 1e-7; // Gap mínimo do MIP
 
 // =====================================================================
 //  UTILS
@@ -74,17 +72,40 @@ public:
     }
 };
 
-// Retorna: produto escalar de uma matrix de constantes e uma matriz de variáveis.
+// Retorna: produto escalar entre matrizes de constantes.
+inline IloNum IloMatScalProd(const IloNumMatrix &c, const IloNumMatrix &d)
+{
+    IloNum val = 0.0;
+    for (IloInt i = 0; i < d.getSize(); ++i)
+        val += IloScalProd(c[i], d[i]);
+
+    return val;
+}
+
+// Retorna: produto escalar entre uma matrix de constantes e uma matriz de variáveis.
 inline IloExpr IloMatScalProd(const IloNumMatrix &c, const IloNumVarMatrix &x)
 {
-    IloEnv env = x.getEnv();
-    IloInt nRows = x.getSize();
-
-    IloExpr e(env);
-    for (IloInt i = 0; i < nRows; ++i)
+    IloExpr e(x.getEnv());
+    for (IloInt i = 0; i < x.getSize(); ++i)
         e += IloScalProd(c[i], x[i]);
 
     return e;
+}
+
+// Reseta um array para zero.
+inline void fill_zero(IloNumArray &a)
+{
+    IloInt n = a.getSize();
+    for (IloInt i = 0; i < n; ++i)
+        a[i] = 0.0;
+}
+
+// Reseta uma matriz para zero.
+inline void fill_zero(IloNumMatrix &M)
+{
+    IloInt n = M.getSize();
+    for (IloInt i = 0; i < n; ++i)
+        fill_zero(M[i]);
 }
 
 // =====================================================================
@@ -101,11 +122,11 @@ public:
     int nJ{0}; // |J| depósitos
     int nK{0}; // |K| clientes
 
-    IloNumArray f;  // f[i]    = custo fixo da planta i
-    IloNumArray g;  // g[j]    = custo fixo do depósito j
     IloNumArray p;  // p[i]    = capacidade da planta i
     IloNumArray q;  // q[j]    = capacidade do depósito j
     IloNumArray r;  // r[k]    = demanda do cliente k
+    IloNumArray f;  // f[i]    = custo fixo da planta i
+    IloNumArray g;  // g[j]    = custo fixo do depósito j
     IloNumMatrix c; // c[i][j] = custo planta i -> depósito j
     IloNumMatrix d; // d[j][k] = custo depósito j -> cliente k
 
@@ -114,11 +135,11 @@ public:
           nI(_nI),
           nJ(_nJ),
           nK(_nK),
-          f(env_, nI),
-          g(env_, nJ),
           p(env_, nI),
           q(env_, nJ),
           r(env_, nK),
+          f(env_, nI),
+          g(env_, nJ),
           c(env_, nI, nJ),
           d(env_, nJ, nK)
     {

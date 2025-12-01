@@ -34,7 +34,7 @@ int main()
         // solver_cg.solve(true, 100.0);
 
         // 2. RELAX-AND-CUT
-        TSCFLSolverRelaxAndCut solver_rc(inst, 2);
+        TSCFLSolverRelaxAndCut solver_rc(inst, 0);
         solver_rc.solve(true, 100.0);
 
         // 3. BENDERS
