@@ -23,10 +23,10 @@ Gabriel Braun, 2025
 #include <memory>
 
 #include "tscfl_instance.hpp"
-#include "utils/tscfl_flowcuts.hpp"
-#include "utils/tscfl_worker_dual.hpp"
-#include "utils/tscfl_worker_primal.hpp"
-#include "utils/tscfl_worker_net.hpp"
+#include "lagrangian/tscfl_flowcuts.hpp"
+#include "subproblem/tscfl_subproblem_dual.hpp"
+#include "subproblem/tscfl_subproblem_primal.hpp"
+#include "subproblem/tscfl_subproblem_net.hpp"
 
 ILOSTLBEGIN
 
@@ -52,8 +52,8 @@ public:
     IloAlgorithm::Status status{IloAlgorithm::Unknown};
 
 private:
-    std::unique_ptr<Worker> worker; // Worker par o subproblema de fluxo mínimo
-    FlowCoverCutSet cuts;           // Gerenciamento dos cortes de flow cover
+    std::unique_ptr<Subproblem> subproblem; // Worker par o subproblema de fluxo mínimo
+    FlowCoverCutSet cuts;                   // Gerenciamento dos cortes de flow cover
 
     IloNum epsilon{EPSILON0}; // Parâmetro do subgradiente
 
@@ -76,14 +76,14 @@ private:
     // Conjunto de cortes de flow cover
 
 public:
-    // mode (worker do subproblema de fluxo mínimo):
-    // 0 -> WorkerDual
-    // 1 -> WorkerPrimal
-    // 2 -> WorkerNet (default)
+    // mode (subproblem do subproblema de fluxo mínimo):
+    // 0 -> SubproblemDual
+    // 1 -> SubproblemPrimal
+    // 2 -> SubproblemNet (default)
     explicit TSCFLSolverRelaxAndCut(const TSCFLInstance &inst_, IloInt mode = 2)
         : env(inst_.env),
           inst(inst_),
-          worker(nullptr),
+          subproblem(nullptr),
           l1(env, inst_.nI),
           l2(env, inst_.nJ),
           g1(env, inst_.nI),
@@ -99,13 +99,13 @@ public:
         switch (mode)
         {
         case 0:
-            worker = std::make_unique<WorkerDual>(inst_);
+            subproblem = std::make_unique<SubproblemDual>(inst_);
             break;
         case 1:
-            worker = std::make_unique<WorkerPrimal>(inst_);
+            subproblem = std::make_unique<SubproblemPrimal>(inst_);
             break;
         case 2:
-            worker = std::make_unique<WorkerNet>(inst_);
+            subproblem = std::make_unique<SubproblemNet>(inst_);
             break;
         default:
             throw std::invalid_argument("Worker inválido (deve ser 0, 1, or 2).");
@@ -377,10 +377,11 @@ private:
         }
 
         // 3) Resolução do subproblema de fluxo mínimo com Worker
-        Worker &w = *worker;
-        w.solve(a_h, b_h);
+        Subproblem &sp = *subproblem;
 
-        IloNum ub_h = IloScalProd(inst.f, a_h) + IloScalProd(inst.g, b_h) + w.theta;
+        sp.solve(a_h, b_h);
+
+        IloNum ub_h = IloScalProd(inst.f, a_h) + IloScalProd(inst.g, b_h) + sp.theta;
         if (ub_h + EPS < ub)
         {
             ub = ub_h;

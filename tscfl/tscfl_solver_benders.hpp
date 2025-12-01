@@ -17,9 +17,9 @@ Gabriel Braun, 2025
 #include <stdexcept>
 
 #include "tscfl_instance.hpp"
-#include "utils/tscfl_worker_dual.hpp"
-#include "utils/tscfl_worker_primal.hpp"
-#include "utils/tscfl_worker_net.hpp"
+#include "subproblem/tscfl_subproblem_dual.hpp"
+#include "subproblem/tscfl_subproblem_primal.hpp"
+#include "subproblem/tscfl_subproblem_net.hpp"
 
 ILOSTLBEGIN
 
@@ -37,7 +37,8 @@ static const double SEPPOINT_LAMBDA = 0.5;  // peso do ponto LP no ponto de sepa
 class LazyBendersCallbackI : public IloCplex::LazyConstraintCallbackI
 {
     const TSCFLInstance &inst;
-    Worker &worker;
+    Subproblem &subproblem;
+
     IloBoolVarArray a;
     IloBoolVarArray b;
     IloNumVar eta;
@@ -49,13 +50,13 @@ class LazyBendersCallbackI : public IloCplex::LazyConstraintCallbackI
 public:
     LazyBendersCallbackI(
         const TSCFLInstance &inst_,
-        Worker &worker_,
+        Subproblem &subproblem_,
         IloBoolVarArray a_,
         IloBoolVarArray b_,
         IloNumVar eta_)
         : IloCplex::LazyConstraintCallbackI(inst_.env),
           inst(inst_),
-          worker(worker_),
+          subproblem(subproblem_),
           a(a_),
           b(b_),
           eta(eta_),
@@ -77,17 +78,17 @@ public:
         getValues(b_vals, b);
         eta_val = getValue(eta);
 
-        // 2) Resolve worker
-        worker.solve(a_vals, b_vals);
+        // 2) Resolve subproblem
+        subproblem.solve(a_vals, b_vals);
 
         // 3) Testa violação
-        double viol = worker.theta - eta_val;
+        double viol = subproblem.theta - eta_val;
 
         if (viol <= EPS)
             return;
 
         // 4) Adiciona lazy cut
-        add(eta >= worker.rhs + IloScalProd(worker.coef_a, a) + IloScalProd(worker.coef_b, b));
+        add(eta >= subproblem.rhs + IloScalProd(subproblem.coef_a, a) + IloScalProd(subproblem.coef_b, b));
     }
 };
 
@@ -95,7 +96,8 @@ public:
 class UserBendersCallbackI : public IloCplex::UserCutCallbackI
 {
     const TSCFLInstance &inst;
-    Worker &worker;
+    Subproblem &subproblem;
+
     IloBoolVarArray a;
     IloBoolVarArray b;
     IloNumVar eta;
@@ -118,13 +120,13 @@ class UserBendersCallbackI : public IloCplex::UserCutCallbackI
 public:
     UserBendersCallbackI(
         const TSCFLInstance &inst_,
-        Worker &worker_,
+        Subproblem &subproblem_,
         IloBoolVarArray a_,
         IloBoolVarArray b_,
         IloNumVar eta_)
         : IloCplex::UserCutCallbackI(inst_.env),
           inst(inst_),
-          worker(worker_),
+          subproblem(subproblem_),
           a(a_),
           b(b_),
           eta(eta_),
@@ -222,10 +224,10 @@ public:
             b_sep[j] = SEPPOINT_LAMBDA * b_vals[j] + (1.0 - SEPPOINT_LAMBDA) * b_core[j];
 
         // 7) Resolve subproblema no ponto de separação (não no ponto LP!)
-        worker.solve(a_sep, b_sep);
+        subproblem.solve(a_sep, b_sep);
 
         // 8) Teste de violação avaliado na solução LP (a_vals, b_vals, eta_val)
-        double theta = worker.theta;
+        double theta = subproblem.theta;
         double viol = theta - eta_val;
 
         double min_viol = std::max(USERCUT_ABS_VIOL, USERCUT_REL_VIOL * std::max(1.0, std::fabs(theta)));
@@ -237,7 +239,7 @@ public:
         IloCplex::CutManagement cm =
             (nodeIndex == 0 ? IloCplex::UseCutForce : IloCplex::UseCutPurge);
 
-        add(eta >= worker.rhs + IloScalProd(worker.coef_a, a) + IloScalProd(worker.coef_b, b), cm);
+        add(eta >= subproblem.rhs + IloScalProd(subproblem.coef_a, a) + IloScalProd(subproblem.coef_b, b), cm);
 
         ++cutsThisNode;
     }
@@ -266,13 +268,13 @@ private:
     IloBoolVarArray b; // b_j  = abre depósito j
     IloNumVar eta;     // custo de segundo estágio
 
-    std::unique_ptr<Worker> worker;
+    std::unique_ptr<Subproblem> subproblem;
 
 public:
     // mode:
-    // 0 -> WorkerDual  (default)
-    // 1 -> WorkerPrimal
-    // 2 -> WorkerNet
+    // 0 -> SubproblemDual  (default)
+    // 1 -> SubproblemPrimal
+    // 2 -> SubproblemNet
     explicit TSCFLSolverBenders(const TSCFLInstance &inst_, int mode = 0)
         : env(inst_.env),
           inst(inst_),
@@ -281,7 +283,7 @@ public:
           a(inst_.env, inst_.nI),
           b(inst_.env, inst_.nJ),
           eta(inst_.env, 0.0, IloInfinity, ILOFLOAT),
-          worker(nullptr)
+          subproblem(nullptr)
     {
         build_master();
         cplex.extract(master);
@@ -293,16 +295,16 @@ public:
         switch (mode)
         {
         case 0:
-            worker = std::make_unique<WorkerDual>(inst_);
+            subproblem = std::make_unique<SubproblemDual>(inst_);
             break;
         case 1:
-            worker = std::make_unique<WorkerPrimal>(inst_);
+            subproblem = std::make_unique<SubproblemPrimal>(inst_);
             break;
         case 2:
-            worker = std::make_unique<WorkerNet>(inst_);
+            subproblem = std::make_unique<SubproblemNet>(inst_);
             break;
         default:
-            throw std::invalid_argument("Worker inválido (deve ser 0, 1, or 2).");
+            throw std::invalid_argument("Subproblem inválido (deve ser 0, 1, or 2).");
         }
     }
 
@@ -346,8 +348,8 @@ public:
             cplex.setParam(IloCplex::Param::TimeLimit, time_limit);
 
         // Callbacks Benders
-        cplex.use(new (env) LazyBendersCallbackI(inst, *worker, a, b, eta));
-        cplex.use(new (env) UserBendersCallbackI(inst, *worker, a, b, eta));
+        cplex.use(new (env) LazyBendersCallbackI(inst, *subproblem, a, b, eta));
+        cplex.use(new (env) UserBendersCallbackI(inst, *subproblem, a, b, eta));
 
         // Solve
         auto t0 = std::chrono::steady_clock::now();
