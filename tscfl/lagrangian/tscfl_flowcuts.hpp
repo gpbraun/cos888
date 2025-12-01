@@ -135,7 +135,7 @@ public:
     }
 
     // Returna: contribuição dos cortes para ||g||^2.
-    double norm2() const
+    double norm2sq() const
     {
         double s = 0.0;
         for (const auto &c : cuts)
