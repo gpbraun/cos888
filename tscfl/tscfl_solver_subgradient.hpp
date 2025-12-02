@@ -16,7 +16,7 @@ public:
     // Parâmetros do método
     static constexpr IloNum EPSILON0 = 2;
     static constexpr IloInt MAX_NO_IMPROV = 50;
-    static constexpr IloInt EXTRA_AGE = 5;
+    static constexpr IloInt EXTRA_AGE = 10;
     static constexpr IloInt SOLVE_HEURISTIC_EVERY = 10;
     static constexpr IloInt MAX_NEW_CUTS_PER_ITER = 1;
     static constexpr IloInt PRINT_EVERY = 10;
@@ -29,6 +29,7 @@ private:
     std::unique_ptr<Relaxation> relaxation;
     std::unique_ptr<Subproblem> subproblem;
 
+public:
     // Resultados:
     IloNum lb{0.0};
     IloNum ub{IloInfinity};
@@ -194,27 +195,24 @@ private:
         }
 
         // Log final
-        if (log_output)
-        {
-            std::cout
-                << "\n\n"
-                << "[RC] Subgradiente finalizado.\n\n"
-                << "status = " << status << "\n"
-                // iter
-                << std::fixed << std::setprecision(0)
-                << "iter   = " << iter << "\n"
-                // tempo
-                << std::fixed << std::setprecision(1)
-                << "time   = " << time << " s\n"
-                // LB, UB
-                << std::fixed << std::setprecision(0)
-                << "LB     = " << lb << "\n"
-                << "UB     = " << ub << "\n"
-                // gap, step, ||g||^2
-                << std::scientific << std::setprecision(2)
-                << "gap    = " << gap << "\n"
-                << std::defaultfloat;
-        }
+        std::cout
+            << "\n\n"
+            << "[RC] Subgradiente finalizado.\n\n"
+            << "status = " << status << "\n"
+            // iter
+            << std::fixed << std::setprecision(0)
+            << "iter   = " << iter << "\n"
+            // tempo
+            << std::fixed << std::setprecision(1)
+            << "time   = " << time << " s\n"
+            // LB, UB
+            << std::fixed << std::setprecision(0)
+            << "LB     = " << lb << "\n"
+            << "UB     = " << ub << "\n"
+            // gap, step, ||g||^2
+            << std::scientific << std::setprecision(2)
+            << "gap    = " << gap << "\n"
+            << std::defaultfloat;
 
         return (status == IloAlgorithm::Optimal);
     }

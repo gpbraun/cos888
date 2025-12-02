@@ -52,7 +52,7 @@ public:
     }
 };
 
-// Tensor de constantes
+// Tensor de constantes.
 class IloNumTensor : public IloArray<IloNumMatrix>
 {
 public:
@@ -68,7 +68,7 @@ public:
     }
 };
 
-// Matriz de variáveis.
+// Matriz de variáveis (fracionária positiva).
 class IloNumVarMatrix : public IloArray<IloNumVarArray>
 {
 public:
@@ -82,7 +82,7 @@ public:
         : IloArray<IloNumVarArray>(env, nRows)
     {
         for (IloInt i = 0; i < nRows; ++i)
-            (*this)[i] = IloNumVarArray(env, nCols, 0.0, IloInfinity, ILOFLOAT);
+            (*this)[i] = IloNumVarArray(env, nCols, 0.0, IloInfinity);
     }
 
     IloNumVarArray col(IloInt j) const

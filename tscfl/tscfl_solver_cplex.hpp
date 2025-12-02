@@ -54,6 +54,7 @@ public:
         cplex.setParam(IloCplex::Param::Preprocessing::Aggregator, 0);
         cplex.setParam(IloCplex::Param::RootAlgorithm, IloCplex::Primal);
         cplex.setParam(IloCplex::Param::Benders::Strategy, IloCplex::BendersFull);
+        cplex.setParam(IloCplex::Param::MIP::Tolerances::MIPGap, MIP_GAP);
     }
 
     ~TSCFLSolverCplex()

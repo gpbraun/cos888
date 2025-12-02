@@ -269,14 +269,17 @@ public:
           subproblem(Subproblem::create(inst_, smode)),
           var_a(inst_.env, inst_.nI),
           var_b(inst_.env, inst_.nJ),
-          var_eta(inst_.env, 0.0, IloInfinity, ILOFLOAT)
+          var_eta(inst_.env, 0.0, IloInfinity)
     {
         build_model();
         cplex.extract(model);
 
         // Parâmetros CPLEX (mestre)
         cplex.setParam(IloCplex::Param::Threads, 1);
+        cplex.setParam(IloCplex::Param::Preprocessing::Presolve, 0);
+        cplex.setParam(IloCplex::Param::Preprocessing::Aggregator, 0);
         cplex.setParam(IloCplex::Param::MIP::Strategy::Search, IloCplex::Traditional);
+        cplex.setParam(IloCplex::Param::MIP::Tolerances::MIPGap, MIP_GAP);
     }
 
     ~TSCFLSolverBenders()
@@ -312,10 +315,6 @@ public:
             cplex.setOut(env.getNullStream());
             cplex.setWarning(env.getNullStream());
         }
-
-        // Parâmetros
-        cplex.setParam(IloCplex::Param::MIP::Tolerances::MIPGap, MIP_GAP);
-
         if (time_limit > 0.0)
             cplex.setParam(IloCplex::Param::TimeLimit, time_limit);
 
@@ -324,7 +323,7 @@ public:
         cplex.use(new (env) UserBendersCallbackI(inst, *subproblem, var_a, var_b, var_eta));
 
         // Solve
-        bool ok = cplex.solve();
+        IloBool ok = cplex.solve();
         status = cplex.getStatus();
 
         // Estatísticas

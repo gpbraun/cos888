@@ -67,8 +67,8 @@ public:
           cplex(env),
           obj(env),
           subproblem(Subproblem::create(inst_, Subproblem::Mode::NET)),
-          var_a(env, inst_.nI, 0.0, 1.0, ILOFLOAT),
-          var_b(env, inst_.nJ, 0.0, 1.0, ILOFLOAT),
+          var_a(env, inst_.nI, 0.0, 1.0),
+          var_b(env, inst_.nJ, 0.0, 1.0),
           constr_l1(env, inst_.nI),
           constr_l2(env, inst_.nJ),
           constr_m2(env, inst_.nK),
@@ -357,27 +357,24 @@ public:
         }
 
         // Log final
-        if (log_output)
-        {
-            std::cout
-                << "\n\n"
-                << "[RC] Subgradiente finalizado.\n\n"
-                << "status = " << status << "\n"
-                // iter
-                << std::fixed << std::setprecision(0)
-                << "iter   = " << iter << "\n"
-                // tempo
-                << std::fixed << std::setprecision(1)
-                << "time   = " << time << " s\n"
-                // LB, UB
-                << std::fixed << std::setprecision(0)
-                << "LB     = " << lb << "\n"
-                << "UB     = " << ub << "\n"
-                // gap, step, ||g||^2
-                << std::scientific << std::setprecision(2)
-                << "gap    = " << gap << "\n"
-                << std::defaultfloat;
-        }
+        std::cout
+            << "\n\n"
+            << "[RC] Subgradiente finalizado.\n\n"
+            << "status = " << status << "\n"
+            // iter
+            << std::fixed << std::setprecision(0)
+            << "iter   = " << iter << "\n"
+            // tempo
+            << std::fixed << std::setprecision(1)
+            << "time   = " << time << " s\n"
+            // LB, UB
+            << std::fixed << std::setprecision(0)
+            << "LB     = " << lb << "\n"
+            << "UB     = " << ub << "\n"
+            // gap, step, ||g||^2
+            << std::scientific << std::setprecision(2)
+            << "gap    = " << gap << "\n"
+            << std::defaultfloat;
 
         return (status == IloAlgorithm::Optimal);
     }
