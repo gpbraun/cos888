@@ -12,26 +12,13 @@ Gabriel Braun, 2025
 
 class TSCFLSolverColumnGeneration
 {
-protected:
-    IloEnv &env;
-    const TSCFLInstance &inst;
-
 public:
     // Parâmetros do método
     static constexpr IloInt PRINT_EVERY = 10;
 
-    // Resultados:
-    IloNum lb{0.0};            // LB da relaxação (LP)
-    IloNum ub{IloInfinity};    // melhor primal viável (IP) via heurística
-    IloNum lp_ub{IloInfinity}; // valor atual do RMP (UB p/ LP)
-    IloNum gap{IloInfinity};
-    IloNum time{0.0};
-    IloInt64 iter{0};
-    IloAlgorithm::Status status{IloAlgorithm::Unknown};
-
-    // Melhor solução primal encontrada
-    IloNumArray a;
-    IloNumArray b;
+protected:
+    IloEnv &env;
+    const TSCFLInstance &inst;
 
 private:
     IloModel model;
@@ -39,13 +26,13 @@ private:
     std::unique_ptr<Subproblem> subproblem;
 
     // Variáveis
-    IloNumVarArray var_a;
-    IloNumVarArray var_b;
+    IloNumVarArray var_a; // a[i]
+    IloNumVarArray var_b; // b[j]
 
     // Restrições
-    IloRangeArray constr_l1; // constr_l1[i] = restrição de capacidade da planta i
-    IloRangeArray constr_l2; // constr_l2[j] = restrição de capacidade do depósito j
-    IloRangeArray constr_m2; // constr_m2[k] = restrição de demanda do cliente k
+    IloRangeArray constr_l1; // constr_l1[i]
+    IloRangeArray constr_l2; // constr_l2[j]
+    IloRangeArray constr_m2; // constr_m2[k]
 
     IloObjective obj;
 
@@ -59,6 +46,18 @@ private:
     std::vector<IloNumVarArray> z;
 
 public:
+    // Melhor solução primal encontrada
+    IloNumArray a;
+    IloNumArray b;
+
+    // Resultados:
+    IloNum lb{0.0};
+    IloNum ub{IloInfinity};
+    IloNum gap{IloInfinity};
+    IloNum time{0.0};
+    IloInt64 iter{0};
+    IloAlgorithm::Status status{IloAlgorithm::Unknown};
+
     explicit TSCFLSolverColumnGeneration(
         const TSCFLInstance &inst_,
         Subproblem::Mode smode = Subproblem::Mode::NET)
@@ -72,7 +71,9 @@ public:
           var_b(env, inst_.nJ, 0.0, 1.0, ILOFLOAT),
           constr_l1(env, inst_.nI),
           constr_l2(env, inst_.nJ),
-          constr_m2(env, inst_.nK)
+          constr_m2(env, inst_.nK),
+          a(env, inst_.nI),
+          b(env, inst_.nJ)
     {
         // Inicializa vetores de colunas e infos
         z.resize(inst.nK);
@@ -213,6 +214,14 @@ private:
         model.add(z_var);
     }
 
+    IloInt get_num_columns() const
+    {
+        IloInt total = 0;
+        for (int k = 0; k < inst.nK; ++k)
+            total += z[k].getSize();
+        return total;
+    }
+
 public:
     bool solve(bool log_output = true, double time_limit = -1.0)
     {
@@ -229,18 +238,16 @@ public:
             std::cout << std::right
                       << std::setw(5) << "it"
                       << std::setw(10) << "time(s)"
-                      << std::setw(15) << "z_LR"
                       << std::setw(15) << "LB"
                       << std::setw(15) << "UB"
                       << std::setw(12) << "gap"
                       << std::setw(10) << "cols"
                       << "\n"
-                      << std::string(100, '-') << "\n"
+                      << std::string(70, '-') << "\n"
                       << std::defaultfloat;
         }
 
-        bool converged = false;
-        while (!converged)
+        while (true)
         {
             // Controle de tempo
             auto t1 = std::chrono::steady_clock::now();
@@ -262,9 +269,7 @@ public:
             }
 
             status = cplex.getStatus();
-            double opt_model = cplex.getObjValue();
-            last_model_value = opt_model;
-            lp_ub = opt_model;
+            lb = cplex.getObjValue();
 
             // Resolve a heurística primal
             IloNum opt_h = SP.solve_primal_heuristic(cplex, var_a, var_b, a_h, b_h);
@@ -275,13 +280,15 @@ public:
                 b = b_h;
             }
 
+            if (ub < IloInfinity && lb > 0.0 && ub > lb + EPS)
+                gap = (ub - lb) / IloMax(1.0, IloAbs(ub));
+
+            // Pricing: tenta gerar novas colunas
             cplex.getDuals(l1, constr_l1);
             cplex.getDuals(l2, constr_l2);
             cplex.getDuals(m2, constr_m2);
 
-            // Pricing: tenta gerar novas colunas
-            IloBool any_new = false;
-
+            bool any_new = false;
             for (int k = 0; k < inst.nK; ++k)
             {
                 IloNum rk = inst.r[k];
@@ -308,10 +315,9 @@ public:
             }
 
             // Log
-            if (log_output && (iter % PRINT_EVERY == 0))
+            if (log_output && (iter % PRINT_EVERY == 0 || !any_new))
             {
-                std::cout << "[SG] "
-                          << std::right
+                std::cout << std::right
                           << std::setw(5) << iter
                           // tempo
                           << std::fixed << std::setprecision(1)
@@ -319,12 +325,14 @@ public:
                           << elapsed
                           // z_LR, LB, UB
                           << std::setprecision(0)
-                          << std::setw(10) << lp_ub
-                          << std::setw(10) << lb
-                          << std::setw(10) << ub
+                          << std::setw(15) << lb
+                          << std::setw(15) << ub
                           // gap
                           << std::scientific << std::setprecision(2)
                           << std::setw(12) << gap
+                          // número de colunas
+                          << std::fixed
+                          << std::setw(10) << get_num_columns()
                           << "\n"
                           << std::defaultfloat;
             }
@@ -332,48 +340,45 @@ public:
             // Critério de parada:
             if (!any_new)
             {
-                converged = true;
-                lb = opt_model;
+                status = IloAlgorithm::Optimal;
                 break;
             }
+
+            ++iter;
         }
 
         auto t_end = std::chrono::steady_clock::now();
         time = std::chrono::duration<double>(t_end - t0).count();
 
-        // Atualiza o status e o gap
-        if (converged)
-            status = IloAlgorithm::Optimal;
-
-        if (ub < IloInfinity && lb > -IloInfinity)
-            gap = (ub - lb) / IloMax(1.0, IloAbs(ub));
+        if (status == IloAlgorithm::Unknown)
+        {
+            if (ub < IloInfinity && lb > 0.0)
+                status = IloAlgorithm::Feasible;
+        }
 
         // Log final
         if (log_output)
         {
             std::cout
                 << "\n\n"
-                << "[RC] Geração de colunas finalizado.\n"
-                << "LP*    = " << (lb > -IloInfinity ? lb : last_model_value)
-                << "LB     = " << lb << "\n"
-                << "UB     = " << ub << "\n"
+                << "[RC] Subgradiente finalizado.\n\n"
                 << "status = " << status << "\n"
-                << "gap    = " << gap << "\n"
+                // iter
+                << std::fixed << std::setprecision(0)
                 << "iter   = " << iter << "\n"
                 // tempo
                 << std::fixed << std::setprecision(1)
                 << "time   = " << time << " s\n"
+                // LB, UB
+                << std::fixed << std::setprecision(0)
+                << "LB     = " << lb << "\n"
+                << "UB     = " << ub << "\n"
+                // gap, step, ||g||^2
+                << std::scientific << std::setprecision(2)
+                << "gap    = " << gap << "\n"
                 << std::defaultfloat;
-
-            std::cout << "\n[CG] Column Generation finalizado.\n";
-            std::cout << "LP*   = " << (lb > -IloInfinity ? lb : last_model_value)
-                      << "  (LB relaxação, se convergiu)\n";
-            std::cout << "UB    = " << ub << "  (melhor primal viável)\n";
-            std::cout << "gap   = " << gap << "\n";
-            std::cout << "status= " << status << "\n";
-            std::cout << "time  = " << time << " s\n";
         }
 
-        return converged;
+        return (status == IloAlgorithm::Optimal);
     }
 };

@@ -19,10 +19,10 @@ private:
     IloCplex cplex;
 
     // Variáveis duais
-    IloNumVarArray var_l1; // l1[i] = dual da capacidade da planta i   (>= 0)
-    IloNumVarArray var_l2; // l2[j] = dual da capacidade do depósito j (>= 0)
-    IloNumVarArray var_m1; // m1[j] = dual do balanço nos depósitos j  (livre)
-    IloNumVarArray var_m2; // m2[k] = dual da demanda do cliente k     (livre)
+    IloNumVarArray var_l1; // l1[i] >= 0
+    IloNumVarArray var_l2; // l2[j] >= 0
+    IloNumVarArray var_m1; // m1[j] (livre)
+    IloNumVarArray var_m2; // m2[k] (livre)
 
     // Função objetivo
     IloObjective obj;

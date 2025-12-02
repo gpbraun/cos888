@@ -8,15 +8,14 @@ Gabriel Braun, 2025
 
 #include <iostream>
 
-// #include "tscfl_instance.hpp"
-// #include "tscfl_solver_cplex.hpp"
-#include "tscfl_solver_cg.hpp"
-#include "tscfl_solver_benders.hpp"
+#include "tscfl_solver_cplex.hpp"
+#include "tscfl_solver_columns.hpp"
 #include "tscfl_solver_subgradient.hpp"
+#include "tscfl_solver_benders.hpp"
 
 int main()
 {
-    const std::string path = "_instances/fernandes/tscfl_050_100_200_a.txt";
+    const std::string path = "_instances/fernandes/tscfl_050_100_200_c.txt";
 
     IloEnv env;
     int status = 0;
@@ -30,16 +29,16 @@ int main()
         // solver_cplex.solve(true, 200.0);
 
         // 1. COLUNAS
-        TSCFLSolverColumnGeneration solver_cg(inst);
-        solver_cg.solve(true, 100.0);
+        // TSCFLSolverColumnGeneration solver_cg(inst);
+        // solver_cg.solve(true, 100.0);
 
         // 2. RELAX-AND-CUT
         // TSCFLSolverSubgradient solver_rc(inst);
         // solver_rc.solve(true, 20.0);
 
         // 3. BENDERS
-        // TSCFLSolverBenders solver_benders(inst, Subproblem::Mode::NET);
-        // solver_benders.solve(true, 60.0);
+        TSCFLSolverBenders solver_benders(inst, Subproblem::Mode::DUAL);
+        solver_benders.solve(true, 60.0);
     }
     catch (const IloException &e)
     {

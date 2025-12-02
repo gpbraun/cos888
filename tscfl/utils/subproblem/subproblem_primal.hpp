@@ -19,14 +19,14 @@ private:
     IloCplex cplex;
 
     // Variáveis de fluxo
-    IloNumVarMatrix var_x; // x[i][j] = fluxo planta i -> depósito j
-    IloNumVarMatrix var_y; // y[j][k] = fluxo depósito j -> cliente k
+    IloNumVarMatrix var_x; // x[i][j]
+    IloNumVarMatrix var_y; // y[j][k]
 
     // Restrições
-    IloRangeArray constr_l1; // constr_l1[i] = restrição de capacidade da planta i
-    IloRangeArray constr_l2; // constr_l2[j] = restrição de capacidade do depósito j
-    IloRangeArray constr_m1; // constr_m1[j] = restrição de balanço nos depósitos j
-    IloRangeArray constr_m2; // constr_m2[k] = restrição de demanda do cliente k
+    IloRangeArray constr_l1; // constr_l1[i]
+    IloRangeArray constr_l2; // constr_l2[j]
+    IloRangeArray constr_m1; // constr_m1[j]
+    IloRangeArray constr_m2; // constr_m2[k]
 
 public:
     explicit SubproblemPrimal(const TSCFLInstance &inst_)

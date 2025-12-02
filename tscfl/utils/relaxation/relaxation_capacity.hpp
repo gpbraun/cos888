@@ -14,10 +14,8 @@ Gabriel Braun, 2025
 class RelaxationCapacity : public Relaxation
 {
 private:
-    // Multiplicadores das restrições de capacidades
     IloNumArray l1; // l1[i] >= 0
     IloNumArray l2; // l2[j] >= 0
-    // Subgradientes das restrições de capacidades
     IloNumArray g1; // g1[i] = sum_j x_ij - p_i a_i
     IloNumArray g2; // g2[j] = sum_k y_jk - q_j b_j
 
@@ -92,9 +90,9 @@ public:
             g2[j] = IloSum(y[j]) - inst.q[j] * b[j];
 
         // 4) Retorna o valor da Lagrangeana
-        return IloScalProd(inst.f, a) + IloScalProd(inst.g, b) +       // custo fixo
-               IloMatScalProd(inst.c, x) + IloMatScalProd(inst.d, y) + // custo variável
-               IloScalProd(l1, g1) + IloScalProd(l2, g2);              // termos lagrangeanos (l^T g)
+        return IloScalProd(inst.f, a) + IloScalProd(inst.g, b) +
+               IloMatScalProd(inst.c, x) + IloMatScalProd(inst.d, y) +
+               IloScalProd(l1, g1) + IloScalProd(l2, g2);
     }
 
     // ||g||^2 = ||g1||^2 + ||g2||^2 + contribuição dos cortes

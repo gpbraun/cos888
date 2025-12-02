@@ -10,46 +10,40 @@ Gabriel Braun, 2025
 
 #include "utils/utils.hpp"
 
-static const double USERCUT_MAX_GAP = 1e-4;     // maior gap para gerar user cuts
-static const double USERCUT_ABS_VIOL = 1e-1;    // violação mínima absoluta
-static const double USERCUT_REL_VIOL = 1e-4;    // violação mínima relativa
-static const double MAX_FRAC_SUM = 10.0;        // quão fracionária pode ser a solução LP
-static const int MAX_CUTS_PER_NODE = 1;         // máx. cortes por nó (user cuts)
-static const int MAX_NODE_INDEX_USER_CUTS = 10; // 0 => só no nó raiz
-
-static const double COREPOINT_LAMBDA = 0.5; // passo para atualizar core point externo
-static const double SEPPOINT_LAMBDA = 0.5;  // peso do ponto LP no ponto de separação
-
 // CALLBACK: Lazy Constraint
 class LazyBendersCallbackI : public IloCplex::LazyConstraintCallbackI
 {
+protected:
+    IloEnv &env;
     const TSCFLInstance &inst;
+
+private:
     Subproblem &subproblem;
 
-    IloBoolVarArray a;
-    IloBoolVarArray b;
-    IloNumVar eta;
+    IloBoolVarArray &var_a;
+    IloBoolVarArray &var_b;
+    IloNumVar &var_eta;
 
-    IloNumArray a_vals;
-    IloNumArray b_vals;
-    IloNum eta_val;
+    IloNumArray a;
+    IloNumArray b;
+    IloNum eta{0.0};
 
 public:
     LazyBendersCallbackI(
         const TSCFLInstance &inst_,
         Subproblem &subproblem_,
-        IloBoolVarArray a_,
-        IloBoolVarArray b_,
-        IloNumVar eta_)
+        IloBoolVarArray &var_a_,
+        IloBoolVarArray &var_b_,
+        IloNumVar &var_eta_)
         : IloCplex::LazyConstraintCallbackI(inst_.env),
+          env(inst_.env),
           inst(inst_),
           subproblem(subproblem_),
-          a(a_),
-          b(b_),
-          eta(eta_),
-          a_vals(inst_.env, inst_.nI),
-          b_vals(inst_.env, inst_.nJ),
-          eta_val(0)
+          var_a(var_a_),
+          var_b(var_b_),
+          var_eta(var_eta_),
+          a(env, inst_.nI),
+          b(env, inst_.nJ)
     {
     }
 
@@ -61,37 +55,53 @@ public:
     void main() override
     {
         // 1) Lê (a, b, eta) da solução corrente
-        getValues(a_vals, a);
-        getValues(b_vals, b);
-        eta_val = getValue(eta);
+        getValues(a, var_a);
+        getValues(b, var_b);
+        eta = getValue(var_eta);
 
         // 2) Resolve subproblem
-        subproblem.solve(a_vals, b_vals);
+        subproblem.solve(a, b);
 
         // 3) Testa violação
-        double viol = subproblem.theta - eta_val;
+        double viol = subproblem.theta - eta;
 
         if (viol <= EPS)
             return;
 
         // 4) Adiciona lazy cut
-        add(eta >= subproblem.rhs + IloScalProd(subproblem.coef_a, a) + IloScalProd(subproblem.coef_b, b));
+        add(var_eta >= subproblem.rhs +
+                           IloScalProd(subproblem.coef_a, var_a) +
+                           IloScalProd(subproblem.coef_b, var_b));
     }
 };
 
 // CALLBACK: User Cuts
 class UserBendersCallbackI : public IloCplex::UserCutCallbackI
 {
+public:
+    // Parâmetros do callback
+    static constexpr IloNum MAX_GAP = 1e-4;
+    static constexpr IloNum ABS_VIOL = 1e-1;
+    static constexpr IloNum REL_VIOL = 1e-4;
+    static constexpr IloNum MAX_FRAC_SUM = 10.0;
+    static constexpr IloInt MAX_CUTS_PER_NODE = 1;
+    static constexpr IloInt MAX_NODE_INDEX_USER_CUTS = 10;
+    static constexpr IloNum COREPOINT_LAMBDA = 0.5;
+    static constexpr IloNum SEPPOINT_LAMBDA = 0.5;
+
+protected:
+    IloEnv &env;
     const TSCFLInstance &inst;
+
+private:
+    IloBoolVarArray &var_a;
+    IloBoolVarArray &var_b;
+    IloNumVar &var_eta;
     Subproblem &subproblem;
 
-    IloBoolVarArray a;
-    IloBoolVarArray b;
-    IloNumVar eta;
-
-    IloNumArray a_vals;
-    IloNumArray b_vals;
-    IloNum eta_val;
+    IloNumArray a;
+    IloNumArray b;
+    IloNum eta{0.0};
 
     // Controle de cortes por nó
     IloInt64 lastNodeIndex;
@@ -102,38 +112,31 @@ class UserBendersCallbackI : public IloCplex::UserCutCallbackI
     IloNumArray b_core;
     IloNumArray a_sep;
     IloNumArray b_sep;
-    IloBool core_initialized;
+    IloBool core_initialized{IloFalse};
 
 public:
     UserBendersCallbackI(
         const TSCFLInstance &inst_,
         Subproblem &subproblem_,
-        IloBoolVarArray a_,
-        IloBoolVarArray b_,
-        IloNumVar eta_)
+        IloBoolVarArray &var_a_,
+        IloBoolVarArray &var_b_,
+        IloNumVar &var_eta_)
         : IloCplex::UserCutCallbackI(inst_.env),
+          env(inst_.env),
           inst(inst_),
           subproblem(subproblem_),
-          a(a_),
-          b(b_),
-          eta(eta_),
-          a_vals(inst_.env, inst_.nI),
-          b_vals(inst_.env, inst_.nJ),
-          eta_val(0.0),
+          var_a(var_a_),
+          var_b(var_b_),
+          var_eta(var_eta_),
+          a(env, inst_.nI),
+          b(env, inst_.nJ),
           lastNodeIndex(-1),
           cutsThisNode(0),
-          a_core(inst_.env, inst_.nI),
-          b_core(inst_.env, inst_.nJ),
-          a_sep(inst_.env, inst_.nI),
-          b_sep(inst_.env, inst_.nJ),
-          core_initialized(IloFalse)
+          a_core(env, inst_.nI),
+          b_core(env, inst_.nJ),
+          a_sep(env, inst_.nI),
+          b_sep(env, inst_.nJ)
     {
-        // Inicializa core point em 0.5 (interior de [0,1]^n)
-        for (int i = 0; i < inst_.nI; ++i)
-            a_core[i] = 0.5;
-        for (int j = 0; j < inst_.nJ; ++j)
-            b_core[j] = 0.5;
-        core_initialized = IloTrue;
     }
 
     IloCplex::CallbackI *duplicateCallback() const override
@@ -143,16 +146,16 @@ public:
 
     void main() override
     {
-        // 0) Só depois do cut loop
+        // Só depois do cut loop
         if (!isAfterCutLoop())
             return;
 
-        // 1) Limita user cuts a nós "rasos"
+        // Limita user cuts a nós "rasos"
         IloInt64 nodeIndex = getNnodes64();
-        if (getMIPRelativeGap() <= USERCUT_MAX_GAP && nodeIndex > MAX_NODE_INDEX_USER_CUTS)
+        if (getMIPRelativeGap() <= MAX_GAP && nodeIndex > MAX_NODE_INDEX_USER_CUTS)
             return;
 
-        // 2) Controle de cortes por nó
+        // Controle de cortes por nó
         if (nodeIndex != lastNodeIndex)
         {
             lastNodeIndex = nodeIndex;
@@ -161,17 +164,17 @@ public:
         if (cutsThisNode >= MAX_CUTS_PER_NODE)
             return;
 
-        // 3) Lê (a, b, eta) da solução corrente
-        getValues(a_vals, a);
-        getValues(b_vals, b);
-        eta_val = getValue(eta);
+        // Lê (a, b, eta) da solução corrente
+        getValues(a, var_a);
+        getValues(b, var_b);
+        eta = getValue(var_eta);
 
-        // 4) Evita cortes para soluções muito fracionárias (tendem a ser fracos)
+        // Evita cortes para soluções muito fracionárias (tendem a ser fracos)
         double frac_sum = 0.0;
 
         for (int i = 0; i < inst.nI; ++i)
         {
-            double v = a_vals[i];
+            double v = a[i];
             double frac = IloAbs(v - std::round(v));
             frac_sum += IloMin(frac, 1.0 - frac);
             if (frac_sum > MAX_FRAC_SUM)
@@ -179,54 +182,53 @@ public:
         }
         for (int j = 0; j < inst.nJ; ++j)
         {
-            double v = b_vals[j];
+            double v = b[j];
             double frac = IloAbs(v - std::round(v));
             frac_sum += IloMin(frac, 1.0 - frac);
             if (frac_sum > MAX_FRAC_SUM)
                 return;
         }
 
-        // 5) Atualiza core point (média entre core e solução LP atual)
-        //    core^{new} = (1-COREPOINT_LAMBDA)*core + COREPOINT_LAMBDA * a_vals
+        // Atualiza core point (média entre core e solução LP atual)
+        // core^{new} = (1-COREPOINT_LAMBDA)*core + COREPOINT_LAMBDA*a
         if (core_initialized)
         {
             for (int i = 0; i < inst.nI; ++i)
-                a_core[i] = (1.0 - COREPOINT_LAMBDA) * a_core[i] + COREPOINT_LAMBDA * a_vals[i];
+                a_core[i] = (1.0 - COREPOINT_LAMBDA) * a_core[i] + COREPOINT_LAMBDA * a[i];
             for (int j = 0; j < inst.nJ; ++j)
-                b_core[j] = (1.0 - COREPOINT_LAMBDA) * b_core[j] + COREPOINT_LAMBDA * b_vals[j];
+                b_core[j] = (1.0 - COREPOINT_LAMBDA) * b_core[j] + COREPOINT_LAMBDA * b[j];
         }
         else
         {
             for (int i = 0; i < inst.nI; ++i)
-                a_core[i] = a_vals[i];
+                a_core[i] = a[i];
             for (int j = 0; j < inst.nJ; ++j)
-                b_core[j] = b_vals[j];
+                b_core[j] = b[j];
             core_initialized = IloTrue;
         }
 
-        // 6) Define ponto de separação
+        // Define ponto de separação
         for (int i = 0; i < inst.nI; ++i)
-            a_sep[i] = SEPPOINT_LAMBDA * a_vals[i] + (1.0 - SEPPOINT_LAMBDA) * a_core[i];
+            a_sep[i] = SEPPOINT_LAMBDA * a[i] + (1.0 - SEPPOINT_LAMBDA) * a_core[i];
         for (int j = 0; j < inst.nJ; ++j)
-            b_sep[j] = SEPPOINT_LAMBDA * b_vals[j] + (1.0 - SEPPOINT_LAMBDA) * b_core[j];
+            b_sep[j] = SEPPOINT_LAMBDA * b[j] + (1.0 - SEPPOINT_LAMBDA) * b_core[j];
 
-        // 7) Resolve subproblema no ponto de separação (não no ponto LP!)
+        // Resolve subproblema no ponto de separação
         subproblem.solve(a_sep, b_sep);
 
-        // 8) Teste de violação avaliado na solução LP (a_vals, b_vals, eta_val)
+        // Teste de violação avaliado na solução LP
         double theta = subproblem.theta;
-        double viol = theta - eta_val;
+        double viol = theta - eta;
 
-        double min_viol = IloMax(USERCUT_ABS_VIOL, USERCUT_REL_VIOL * IloMax(1.0, IloAbs(theta)));
-
+        double min_viol = IloMax(ABS_VIOL, REL_VIOL * IloMax(1.0, IloAbs(theta)));
         if (viol <= min_viol)
             return;
 
-        // 9) Adiciona user cut
-        IloCplex::CutManagement cm =
-            (nodeIndex == 0 ? IloCplex::UseCutForce : IloCplex::UseCutPurge);
-
-        add(eta >= subproblem.rhs + IloScalProd(subproblem.coef_a, a) + IloScalProd(subproblem.coef_b, b), cm);
+        // Adiciona user cut
+        add(var_eta >= subproblem.rhs +
+                           IloScalProd(subproblem.coef_a, var_a) +
+                           IloScalProd(subproblem.coef_b, var_b),
+            nodeIndex == 0 ? IloCplex::UseCutForce : IloCplex::UseCutPurge);
 
         ++cutsThisNode;
     }
@@ -239,6 +241,15 @@ protected:
     IloEnv &env;
     const TSCFLInstance &inst;
 
+private:
+    IloModel model;
+    IloCplex cplex;
+    std::unique_ptr<Subproblem> subproblem;
+
+    IloBoolVarArray var_a; // a[i]
+    IloBoolVarArray var_b; // b[j]
+    IloNumVar var_eta;     // custo de segundo estágio
+
 public:
     // Resultados:
     double lb{0.0};
@@ -248,16 +259,6 @@ public:
     IloInt64 nodes{0};
     IloAlgorithm::Status status{IloAlgorithm::Unknown};
 
-private:
-    IloModel model;
-    IloCplex cplex;
-    std::unique_ptr<Subproblem> subproblem;
-
-    IloBoolVarArray var_a; // a_i  = abre planta i
-    IloBoolVarArray var_b; // b_j  = abre depósito j
-    IloNumVar var_eta;     // custo de segundo estágio
-
-public:
     explicit TSCFLSolverBenders(
         const TSCFLInstance &inst_,
         Subproblem::Mode smode = Subproblem::Mode::NET)
@@ -323,35 +324,42 @@ public:
         cplex.use(new (env) UserBendersCallbackI(inst, *subproblem, var_a, var_b, var_eta));
 
         // Solve
-        auto t0 = std::chrono::steady_clock::now();
         bool ok = cplex.solve();
-        auto t1 = std::chrono::steady_clock::now();
-
-        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(t1 - t0).count();
+        status = cplex.getStatus();
 
         // Estatísticas
-        status = cplex.getStatus();
         gap = cplex.getMIPRelativeGap();
         nodes = cplex.getNnodes64();
-        time = static_cast<int>(elapsed);
+        time = cplex.getTime();
 
         if (ok)
         {
             ub = cplex.getObjValue();
             lb = cplex.getBestObjValue();
 
-            std::cout << "\n[BENDERS] Solved.\n";
-            std::cout << "UB     = " << ub << "\n";
-            std::cout << "LB     = " << lb << "\n";
-            std::cout << "status = " << status << "\n";
-            std::cout << "gap    = " << gap << "\n";
-            std::cout << "nodes  = " << nodes << "\n";
-            std::cout << "time   = " << time << "s\n";
-            std::cout << "eta*   = " << cplex.getValue(var_eta) << "\n";
+            std::cout
+                << "\n\n"
+                << "[BENDERS] Benders finalizado.\n\n"
+                << "status = " << status << "\n"
+                // nodes
+                << std::fixed << std::setprecision(0)
+                << "nodes   = " << nodes << "\n"
+                // tempo
+                << std::fixed << std::setprecision(1)
+                << "time   = " << time << " s\n"
+                // LB, UB
+                << std::fixed << std::setprecision(0)
+                << "eta*   = " << cplex.getValue(var_eta) << "\n"
+                << "LB     = " << lb << "\n"
+                << "UB     = " << ub << "\n"
+                // gap, step, ||g||^2
+                << std::scientific << std::setprecision(2)
+                << "gap    = " << gap << "\n"
+                << std::defaultfloat;
         }
         else
         {
-            std::cerr << "\n[BENDERS] No solution. status = " << status << "\n";
+            std::cerr << "\n[BENDERS] Sem solução. status = " << status << "\n";
             std::cerr << "nodes = " << nodes << "\n";
             std::cerr << "time  = " << time << "s\n";
         }

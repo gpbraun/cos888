@@ -12,10 +12,6 @@ Gabriel Braun, 2025
 
 class TSCFLSolverSubgradient
 {
-protected:
-    IloEnv &env;
-    const TSCFLInstance &inst;
-
 public:
     // Parâmetros do método
     static constexpr IloNum EPSILON0 = 2;
@@ -24,6 +20,14 @@ public:
     static constexpr IloInt SOLVE_HEURISTIC_EVERY = 10;
     static constexpr IloInt MAX_NEW_CUTS_PER_ITER = 1;
     static constexpr IloInt PRINT_EVERY = 10;
+
+protected:
+    IloEnv &env;
+    const TSCFLInstance &inst;
+
+private:
+    std::unique_ptr<Relaxation> relaxation;
+    std::unique_ptr<Subproblem> subproblem;
 
     // Resultados:
     IloNum lb{0.0};
@@ -37,11 +41,6 @@ public:
     IloNumArray a;
     IloNumArray b;
 
-private:
-    std::unique_ptr<Relaxation> relaxation;
-    std::unique_ptr<Subproblem> subproblem;
-
-public:
     explicit TSCFLSolverSubgradient(
         const TSCFLInstance &inst_,
         Relaxation::Mode rmode = Relaxation::Mode::CAPACITIES,
@@ -55,7 +54,6 @@ public:
     {
     }
 
-public:
     // Método principal
     bool solve(bool log_output = true, IloNum time_limit = -1.0)
     {
@@ -202,6 +200,8 @@ public:
                 << "\n\n"
                 << "[RC] Subgradiente finalizado.\n\n"
                 << "status = " << status << "\n"
+                // iter
+                << std::fixed << std::setprecision(0)
                 << "iter   = " << iter << "\n"
                 // tempo
                 << std::fixed << std::setprecision(1)

@@ -14,10 +14,8 @@ Gabriel Braun, 2025
 class RelaxationBalance : public Relaxation
 {
 private:
-    // Multiplicadores das restrições de balanço
     IloNumArray m1; // m1[k]
     IloNumArray m2; // m2[j]
-    // Subgradientes das restrições relaxadas
     IloNumArray g1; // g1[k] = r_k - sum_j y_jk
     IloNumArray g2; // g2[j] = sum_i x_ij - sum_k y_jk
 

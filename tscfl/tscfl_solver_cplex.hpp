@@ -13,10 +13,20 @@ Gabriel Braun, 2025
 // SOLVER TSCFL: CPLEX
 class TSCFLSolverCplex
 {
-public:
+protected:
     IloEnv &env;
     const TSCFLInstance &inst;
 
+private:
+    IloModel model;
+    IloCplex cplex;
+
+    IloBoolVarArray var_a; // a[i]
+    IloBoolVarArray var_b; // b[j]
+    IloNumVarMatrix var_x; // x[i][j]
+    IloNumVarMatrix var_y; // y[j][k]
+
+public:
     // Resultados:
     IloNum lb{0.0};
     IloNum ub{IloInfinity};
@@ -25,16 +35,6 @@ public:
     IloInt64 nodes{0};
     IloAlgorithm::Status status{IloAlgorithm::Unknown};
 
-private:
-    IloModel model;
-    IloCplex cplex;
-
-    IloBoolVarArray var_a; // a[i]    = abre planta i
-    IloBoolVarArray var_b; // b[j]    = abre depósito j
-    IloNumVarMatrix var_x; // x[i][j] = fluxo planta i -> depósito j
-    IloNumVarMatrix var_y; // y[j][k] = fluxo depósito j -> cliente k
-
-public:
     explicit TSCFLSolverCplex(const TSCFLInstance &inst_)
         : env(inst_.env),
           inst(inst_),
@@ -50,8 +50,9 @@ public:
 
         // Parâmetros CPLEX
         cplex.setParam(IloCplex::Param::Threads, 1);
-        cplex.setParam(IloCplex::Param::Preprocessing::Reduce, 0);
-        cplex.setParam(IloCplex::Param::MIP::Tolerances::MIPGap, MIP_GAP);
+        cplex.setParam(IloCplex::Param::Preprocessing::Presolve, 0);
+        cplex.setParam(IloCplex::Param::Preprocessing::Aggregator, 0);
+        cplex.setParam(IloCplex::Param::RootAlgorithm, IloCplex::Primal);
         cplex.setParam(IloCplex::Param::Benders::Strategy, IloCplex::BendersFull);
     }
 
@@ -133,19 +134,28 @@ public:
             ub = cplex.getObjValue();
             lb = cplex.getBestObjValue();
 
-            std::cout << "\n[CPLEX] Solved.\n";
-            std::cout << "UB     = " << ub << "\n";
-            std::cout << "LB     = " << lb << "\n";
-            std::cout << "status = " << status << "\n";
-            std::cout << "gap    = " << gap << "\n";
-            std::cout << "nodes  = " << nodes << "\n";
-            std::cout << "time   = " << time << "s\n";
+            std::cout
+                << "\n\n"
+                << "[CPLEX] CPLEX finalizado.\n\n"
+                << "status = " << status << "\n"
+                // nodes
+                << std::fixed << std::setprecision(0)
+                << "nodes   = " << nodes << "\n"
+                // tempo
+                << std::fixed << std::setprecision(1)
+                << "time   = " << time << " s\n"
+                // LB, UB
+                << std::fixed << std::setprecision(0)
+                << "LB     = " << lb << "\n"
+                << "UB     = " << ub << "\n"
+                // gap, step, ||g||^2
+                << std::scientific << std::setprecision(2)
+                << "gap    = " << gap << "\n"
+                << std::defaultfloat;
         }
         else
         {
-            std::cerr << "\n[CPLEX] No solution. status = " << status << "\n";
-            std::cerr << "nodes = " << nodes << "\n";
-            std::cerr << "time  = " << time << " s\n";
+            std::cerr << "\n[BENDERS] Sem solução. status = " << status << "\n";
         }
 
         return ok;
