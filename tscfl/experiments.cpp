@@ -36,11 +36,11 @@ int main()
         "_instances/fernandes/tscfl_100_200_400_e.txt",
     };
 
-    const double time_limit = 500.0;
+    const double time_limit = 60.0;
     IloEnv env;
     int status = 0;
 
-    std::ofstream out("experiments_mp_bd.txt");
+    std::ofstream out("experiments_cg_rc.txt");
     if (!out)
     {
         std::cerr << "Erro ao abrir arquivo experiments.txt para escrita.\n";
@@ -103,76 +103,76 @@ int main()
             // [CG-*] – Geração de colunas
             // lb, ub, iter, time  (usando nodes como "iter")
             // -----------------------------------------------------------------
-            // {
-            //     // Subproblema Network
-            //     TSCFLSolverColumnGeneration solver_cg_net(inst, Subproblem::Mode::NET);
-            //     solver_cg_net.solve(false, time_limit);
-            //     out << "[CG-n] "
-            //         << std::fixed << std::setprecision(0)
-            //         << solver_cg_net.lb << "  "
-            //         << solver_cg_net.ub << "  "
-            //         << solver_cg_net.iter << "  "
-            //         << std::fixed << std::setprecision(1)
-            //         << solver_cg_net.time << "\n";
-            // }
-            // out.flush();
+            {
+                // Subproblema Network
+                TSCFLSolverColumnGeneration solver_cg_net(inst, Subproblem::Mode::NET);
+                solver_cg_net.solve(false, time_limit);
+                out << "[CG-n] "
+                    << std::fixed << std::setprecision(0)
+                    << solver_cg_net.lb << "  "
+                    << solver_cg_net.ub << "  "
+                    << solver_cg_net.iter << "  "
+                    << std::fixed << std::setprecision(1)
+                    << solver_cg_net.time << "\n";
+            }
+            out.flush();
 
             // -----------------------------------------------------------------
             // [RC-*] – Relax-and-Cut via subgradiente
             // lb, ub, iter, time  (usando nodes como "iter")
             // -----------------------------------------------------------------
-            // {
-            //     // Subproblema Network
-            //     TSCFLSolverSubgradient solver_rc_net(inst, Relaxation::Mode::CAPACITIES, Subproblem::Mode::NET);
-            //     solver_rc_net.solve(false, time_limit);
-            //     out << "[RC-n] "
-            //         << solver_rc_net.lb << "  "
-            //         << solver_rc_net.ub << "  "
-            //         << solver_rc_net.iter << "  "
-            //         << solver_rc_net.time << "\n";
-            // }
-            // out.flush();
+            {
+                // Subproblema Network
+                TSCFLSolverSubgradient solver_rc_net(inst, Relaxation::Mode::CAPACITIES, Subproblem::Mode::NET);
+                solver_rc_net.solve(false, time_limit);
+                out << "[RC-n] "
+                    << solver_rc_net.lb << "  "
+                    << solver_rc_net.ub << "  "
+                    << solver_rc_net.iter << "  "
+                    << solver_rc_net.time << "\n";
+            }
+            out.flush();
 
             // -----------------------------------------------------------------
             // [BD-*] – Benders
             // lb, ub, nodes, time
             // -----------------------------------------------------------------
-            {
-                // Subproblema Primal
-                TSCFLSolverBenders solver_bd_primal(inst, Subproblem::Mode::PRIMAL);
-                solver_bd_primal.solve(false, time_limit);
-                out << "[BD-p] "
-                    << std::fixed << std::setprecision(0)
-                    << solver_bd_primal.lb << "  "
-                    << solver_bd_primal.ub << "  "
-                    << solver_bd_primal.nodes << "  "
-                    << std::fixed << std::setprecision(1)
-                    << solver_bd_primal.time << "\n";
+            // {
+            //     // Subproblema Primal
+            //     TSCFLSolverBenders solver_bd_primal(inst, Subproblem::Mode::PRIMAL);
+            //     solver_bd_primal.solve(false, time_limit);
+            //     out << "[BD-p] "
+            //         << std::fixed << std::setprecision(0)
+            //         << solver_bd_primal.lb << "  "
+            //         << solver_bd_primal.ub << "  "
+            //         << solver_bd_primal.nodes << "  "
+            //         << std::fixed << std::setprecision(1)
+            //         << solver_bd_primal.time << "\n";
 
-                // Subproblema Dual
-                TSCFLSolverBenders solver_bd_dual(inst, Subproblem::Mode::DUAL);
-                solver_bd_dual.solve(false, time_limit);
-                out << "[BD-d] "
-                    << std::fixed << std::setprecision(0)
-                    << solver_bd_dual.lb << "  "
-                    << solver_bd_dual.ub << "  "
-                    << solver_bd_dual.nodes << "  "
-                    << std::fixed << std::setprecision(1)
-                    << solver_bd_dual.time << "\n";
+            //     // Subproblema Dual
+            //     TSCFLSolverBenders solver_bd_dual(inst, Subproblem::Mode::DUAL);
+            //     solver_bd_dual.solve(false, time_limit);
+            //     out << "[BD-d] "
+            //         << std::fixed << std::setprecision(0)
+            //         << solver_bd_dual.lb << "  "
+            //         << solver_bd_dual.ub << "  "
+            //         << solver_bd_dual.nodes << "  "
+            //         << std::fixed << std::setprecision(1)
+            //         << solver_bd_dual.time << "\n";
 
-                // Subproblema Network
-                TSCFLSolverBenders solver_bd_net(inst, Subproblem::Mode::NET);
-                solver_bd_net.solve(false, time_limit);
-                out << "[BD-n] "
-                    << std::fixed << std::setprecision(0)
-                    << solver_bd_net.lb << "  "
-                    << solver_bd_net.ub << "  "
-                    << solver_bd_net.nodes << "  "
-                    << std::fixed << std::setprecision(1)
-                    << solver_bd_net.time << "\n";
-            }
-            out.flush();
-            out << "\n";
+            //     // Subproblema Network
+            //     TSCFLSolverBenders solver_bd_net(inst, Subproblem::Mode::NET);
+            //     solver_bd_net.solve(false, time_limit);
+            //     out << "[BD-n] "
+            //         << std::fixed << std::setprecision(0)
+            //         << solver_bd_net.lb << "  "
+            //         << solver_bd_net.ub << "  "
+            //         << solver_bd_net.nodes << "  "
+            //         << std::fixed << std::setprecision(1)
+            //         << solver_bd_net.time << "\n";
+            // }
+            // out.flush();
+            // out << "\n";
         }
     }
     catch (const IloException &e)

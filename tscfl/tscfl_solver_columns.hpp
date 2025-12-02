@@ -359,7 +359,7 @@ public:
         // Log final
         std::cout
             << "\n\n"
-            << "[RC] Subgradiente finalizado.\n\n"
+            << "[CG] Geração de colunas finalizado.\n\n"
             << "status = " << status << "\n"
             // iter
             << std::fixed << std::setprecision(0)
