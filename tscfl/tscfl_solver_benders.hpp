@@ -172,16 +172,16 @@ public:
         for (int i = 0; i < inst.nI; ++i)
         {
             double v = a_vals[i];
-            double frac = std::fabs(v - std::round(v));
-            frac_sum += std::min(frac, 1.0 - frac);
+            double frac = IloAbs(v - std::round(v));
+            frac_sum += IloMin(frac, 1.0 - frac);
             if (frac_sum > MAX_FRAC_SUM)
                 return;
         }
         for (int j = 0; j < inst.nJ; ++j)
         {
             double v = b_vals[j];
-            double frac = std::fabs(v - std::round(v));
-            frac_sum += std::min(frac, 1.0 - frac);
+            double frac = IloAbs(v - std::round(v));
+            frac_sum += IloMin(frac, 1.0 - frac);
             if (frac_sum > MAX_FRAC_SUM)
                 return;
         }
@@ -217,7 +217,7 @@ public:
         double theta = subproblem.theta;
         double viol = theta - eta_val;
 
-        double min_viol = std::max(USERCUT_ABS_VIOL, USERCUT_REL_VIOL * std::max(1.0, std::fabs(theta)));
+        double min_viol = IloMax(USERCUT_ABS_VIOL, USERCUT_REL_VIOL * IloMax(1.0, IloAbs(theta)));
 
         if (viol <= min_viol)
             return;
@@ -249,13 +249,13 @@ public:
     IloAlgorithm::Status status{IloAlgorithm::Unknown};
 
 private:
-    IloModel master;
+    IloModel model;
     IloCplex cplex;
     std::unique_ptr<Subproblem> subproblem;
 
-    IloBoolVarArray a; // a_i  = abre planta i
-    IloBoolVarArray b; // b_j  = abre depósito j
-    IloNumVar eta;     // custo de segundo estágio
+    IloBoolVarArray var_a; // a_i  = abre planta i
+    IloBoolVarArray var_b; // b_j  = abre depósito j
+    IloNumVar var_eta;     // custo de segundo estágio
 
 public:
     explicit TSCFLSolverBenders(
@@ -263,15 +263,15 @@ public:
         Subproblem::Mode smode = Subproblem::Mode::NET)
         : env(inst_.env),
           inst(inst_),
-          master(inst_.env),
+          model(inst_.env),
           cplex(inst_.env),
           subproblem(Subproblem::create(inst_, smode)),
-          a(inst_.env, inst_.nI),
-          b(inst_.env, inst_.nJ),
-          eta(inst_.env, 0.0, IloInfinity, ILOFLOAT)
+          var_a(inst_.env, inst_.nI),
+          var_b(inst_.env, inst_.nJ),
+          var_eta(inst_.env, 0.0, IloInfinity, ILOFLOAT)
     {
-        build_master();
-        cplex.extract(master);
+        build_model();
+        cplex.extract(model);
 
         // Parâmetros CPLEX (mestre)
         cplex.setParam(IloCplex::Param::Threads, 1);
@@ -281,20 +281,20 @@ public:
     ~TSCFLSolverBenders()
     {
         cplex.end();
-        master.end();
+        model.end();
     }
 
 private:
-    void build_master()
+    void build_model()
     {
         // Capacidade agregada (garante viabilidade do subproblema)
         double demand_sum = IloSum(inst.r);
-        master.add(IloScalProd(inst.p, a) >= demand_sum);
-        master.add(IloScalProd(inst.q, b) >= demand_sum);
+        model.add(IloScalProd(inst.p, var_a) >= demand_sum);
+        model.add(IloScalProd(inst.q, var_b) >= demand_sum);
 
         // OBJETIVO: custo fixo + eta
-        IloObjective obj = IloMinimize(env, IloScalProd(inst.f, a) + IloScalProd(inst.g, b) + eta);
-        master.add(obj);
+        IloObjective obj = IloMinimize(env, IloScalProd(inst.f, var_a) + IloScalProd(inst.g, var_b) + var_eta);
+        model.add(obj);
     }
 
 public:
@@ -319,8 +319,8 @@ public:
             cplex.setParam(IloCplex::Param::TimeLimit, time_limit);
 
         // Callbacks Benders
-        cplex.use(new (env) LazyBendersCallbackI(inst, *subproblem, a, b, eta));
-        cplex.use(new (env) UserBendersCallbackI(inst, *subproblem, a, b, eta));
+        cplex.use(new (env) LazyBendersCallbackI(inst, *subproblem, var_a, var_b, var_eta));
+        cplex.use(new (env) UserBendersCallbackI(inst, *subproblem, var_a, var_b, var_eta));
 
         // Solve
         auto t0 = std::chrono::steady_clock::now();
@@ -347,7 +347,7 @@ public:
             std::cout << "gap    = " << gap << "\n";
             std::cout << "nodes  = " << nodes << "\n";
             std::cout << "time   = " << time << "s\n";
-            std::cout << "eta*   = " << cplex.getValue(eta) << "\n";
+            std::cout << "eta*   = " << cplex.getValue(var_eta) << "\n";
         }
         else
         {

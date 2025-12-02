@@ -110,10 +110,10 @@ public:
             return;
 
         for (IloInt i = 0; i < inst.nI; ++i)
-            l1[i] = std::max(0.0, l1[i] + step * g1[i]);
+            l1[i] = IloMax(0.0, l1[i] + step * g1[i]);
 
         for (IloInt j = 0; j < inst.nJ; ++j)
-            l2[j] = std::max(0.0, l2[j] + step * g2[j]);
+            l2[j] = IloMax(0.0, l2[j] + step * g2[j]);
 
         cuts.update_multipliers(step);
     }

@@ -98,7 +98,7 @@ public:
             IloNum rhs = 0.0;
             for (IloInt j = 0; j < nJ; ++j)
                 if (cost[j] > EPS)
-                    rhs += std::min(inst.q[j], overflow);
+                    rhs += IloMin(inst.q[j], overflow);
 
             FlowCoverCut cut(FlowCoverCut::PLANT, i, cost, rhs);
 
@@ -141,7 +141,7 @@ public:
             IloNum rhs = 0.0;
             for (IloInt k = 0; k < nK; ++k)
                 if (cost[k] > EPS)
-                    rhs += std::min(inst.r[k], overflow);
+                    rhs += IloMin(inst.r[k], overflow);
 
             FlowCoverCut cut(FlowCoverCut::DEPOT, j, cost, rhs);
 

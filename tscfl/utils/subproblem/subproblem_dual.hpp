@@ -60,7 +60,7 @@ public:
     }
 
 private:
-    // Constrói o modelo base do subproblema dual
+    // Constrói: modelo base do subproblema dual
     void build_base_model()
     {
         // RESTRIÇÕES DO SUBPROBLEMA DUAL
@@ -76,7 +76,7 @@ private:
         model.add(obj);
     }
 
-    // Atualiza a função objetivo do subproblema em função de (a,b)
+    // Atualiza: função objetivo do subproblema em função de (a,b)
     void set_objective(const IloNumArray &a_vals, const IloNumArray &b_vals)
     {
         IloExpr obj_expr(env);

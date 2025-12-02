@@ -35,7 +35,7 @@ int main()
 
         // 2. RELAX-AND-CUT
         // TSCFLSolverSubgradient solver_rc(inst);
-        // solver_rc.solve(true, 100.0);
+        // solver_rc.solve(true, 20.0);
 
         // 3. BENDERS
         // TSCFLSolverBenders solver_benders(inst, Subproblem::Mode::NET);

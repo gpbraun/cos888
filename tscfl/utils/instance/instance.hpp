@@ -52,6 +52,22 @@ public:
     }
 };
 
+// Tensor de constantes
+class IloNumTensor : public IloArray<IloNumMatrix>
+{
+public:
+    IloNumTensor(
+        IloEnv env,
+        IloInt nDim1,
+        IloInt nDim2,
+        IloInt nDim3)
+        : IloArray<IloNumMatrix>(env, nDim1)
+    {
+        for (IloInt i = 0; i < nDim1; ++i)
+            (*this)[i] = IloNumMatrix(env, nDim2, nDim3);
+    }
+};
+
 // Matriz de variáveis.
 class IloNumVarMatrix : public IloArray<IloNumVarArray>
 {
@@ -126,9 +142,9 @@ class TSCFLInstance
 public:
     IloEnv &env;
 
-    int nI{0}; // |I| plantas
-    int nJ{0}; // |J| depósitos
-    int nK{0}; // |K| clientes
+    IloInt nI{0}; // |I| plantas
+    IloInt nJ{0}; // |J| depósitos
+    IloInt nK{0}; // |K| clientes
 
     IloNumArray p;  // p[i]    = capacidade da planta i
     IloNumArray q;  // q[j]    = capacidade do depósito j
@@ -171,9 +187,9 @@ public:
             throw std::runtime_error("Erro no arquivo da instância (header).");
 
         int pos = 0;
-        int nI = static_cast<int>(a[pos++]);
-        int nJ = static_cast<int>(a[pos++]);
-        int nK = static_cast<int>(a[pos++]);
+        IloInt nI = static_cast<IloInt>(a[pos++]);
+        IloInt nJ = static_cast<IloInt>(a[pos++]);
+        IloInt nK = static_cast<IloInt>(a[pos++]);
 
         TSCFLInstance inst(env, nI, nJ, nK);
 

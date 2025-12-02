@@ -144,7 +144,7 @@ public:
         for (auto &c : cuts)
         {
             if (c.status != FlowCoverCut::CI)
-                c.u = std::max(0.0, c.u + step * c.overflow);
+                c.u = IloMax(0.0, c.u + step * c.overflow);
         }
     }
 
@@ -165,7 +165,7 @@ public:
             {
                 int i = cut.index;
                 for (int j = 0; j < inst.nJ && j < cut.cost.getSize(); ++j)
-                    if (std::fabs(cut.cost[j]) > EPS)
+                    if (IloAbs(cut.cost[j]) > EPS)
                         cost_x[i][j] += cut.u * cut.cost[j];
 
                 cost_a[i] += -cut.u * inst.p[i];
@@ -174,7 +174,7 @@ public:
             {
                 int j = cut.index;
                 for (int k = 0; k < inst.nK && k < cut.cost.getSize(); ++k)
-                    if (std::fabs(cut.cost[k]) > EPS)
+                    if (IloAbs(cut.cost[k]) > EPS)
                         cost_y[j][k] += cut.u * cut.cost[k];
 
                 cost_b[j] += -cut.u * inst.q[j];
@@ -193,7 +193,6 @@ public:
         for (auto &cut : cuts)
         {
             double lhs = 0.0;
-
             if (cut.type == FlowCoverCut::PLANT)
             {
                 int i = cut.index;
