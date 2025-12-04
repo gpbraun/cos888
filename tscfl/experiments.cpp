@@ -25,29 +25,27 @@ int main()
     // Lista de instâncias a serem rodadas
     const std::vector<std::string> instance_paths = {
         "_instances/fernandes/tscfl_050_100_200_a.txt",
-        "_instances/fernandes/tscfl_050_100_200_b.txt",
-        "_instances/fernandes/tscfl_050_100_200_c.txt",
-        "_instances/fernandes/tscfl_050_100_200_d.txt",
-        "_instances/fernandes/tscfl_050_100_200_e.txt",
-        "_instances/fernandes/tscfl_100_200_400_a.txt",
-        "_instances/fernandes/tscfl_100_200_400_b.txt",
-        "_instances/fernandes/tscfl_100_200_400_c.txt",
-        "_instances/fernandes/tscfl_100_200_400_d.txt",
-        "_instances/fernandes/tscfl_100_200_400_e.txt",
+        // "_instances/fernandes/tscfl_050_100_200_b.txt",
+        // "_instances/fernandes/tscfl_050_100_200_c.txt",
+        // "_instances/fernandes/tscfl_050_100_200_d.txt",
+        // "_instances/fernandes/tscfl_050_100_200_e.txt",
+        // "_instances/fernandes/tscfl_100_200_400_a.txt",
+        // "_instances/fernandes/tscfl_100_200_400_b.txt",
+        // "_instances/fernandes/tscfl_100_200_400_c.txt",
+        // "_instances/fernandes/tscfl_100_200_400_d.txt",
+        // "_instances/fernandes/tscfl_100_200_400_e.txt",
     };
 
     const double time_limit = 60.0;
     IloEnv env;
     int status = 0;
 
-    std::ofstream out("experiments_cg_rc.txt");
+    std::ofstream out("experiments2.txt");
     if (!out)
     {
-        std::cerr << "Erro ao abrir arquivo experiments.txt para escrita.\n";
+        std::cerr << "Erro ao abrir arquivo para escrita.\n";
         return 1;
     }
-
-    out << std::fixed << std::setprecision(2);
 
     try
     {
@@ -78,6 +76,17 @@ int main()
                 out << "[LP]   "
                     << std::fixed << std::setprecision(0)
                     << solver_lp.opt << "\n";
+
+                TSCFLSolverCplex solver_lp2(inst);
+                solver_lp2.solve(false, time_limit);
+
+                out << "[MP]   "
+                    << std::fixed << std::setprecision(0)
+                    << solver_lp2.lb << "  "
+                    << solver_lp2.ub << "  "
+                    << solver_lp2.nodes << "  "
+                    << std::fixed << std::setprecision(1)
+                    << solver_lp2.time << "\n";
             }
             out.flush();
 

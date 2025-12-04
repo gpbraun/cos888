@@ -29,6 +29,7 @@ private:
 public:
     // Resultados:
     IloNum opt{0.0};
+    IloNum time{0.0};
     IloAlgorithm::Status status{IloAlgorithm::Unknown};
 
     explicit TSCFLSolverLP(const TSCFLInstance &inst_)
@@ -121,6 +122,8 @@ public:
         status = cplex.getStatus();
 
         // Estatísticas
+        time = cplex.getTime();
+
         if (ok)
         {
             opt = cplex.getObjValue();

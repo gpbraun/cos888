@@ -218,7 +218,7 @@ public:
             else
             {
                 ++cut.age;
-                if (cut.age <= extra_age && cut.u > EPS)
+                if (cut.u > EPS && cut.age <= extra_age)
                 {
                     cut.status = FlowCoverCut::PA;
                 }

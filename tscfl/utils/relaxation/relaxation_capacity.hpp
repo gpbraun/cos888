@@ -90,9 +90,12 @@ public:
             g2[j] = IloSum(y[j]) - inst.q[j] * b[j];
 
         // 4) Retorna o valor da Lagrangeana
-        return IloScalProd(inst.f, a) + IloScalProd(inst.g, b) +
-               IloMatScalProd(inst.c, x) + IloMatScalProd(inst.d, y) +
-               IloScalProd(l1, g1) + IloScalProd(l2, g2);
+        return IloScalProd(inst.f, a) +
+               IloScalProd(inst.g, b) +
+               IloMatScalProd(inst.c, x) +
+               IloMatScalProd(inst.d, y) +
+               IloScalProd(l1, g1) +
+               IloScalProd(l2, g2);
     }
 
     // ||g||^2 = ||g1||^2 + ||g2||^2 + contribuição dos cortes

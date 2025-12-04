@@ -17,7 +17,7 @@ protected:
     IloEnv &env;
     const TSCFLInstance &inst;
 
-private:
+public:
     IloModel model;
     IloCplex cplex;
 
@@ -55,6 +55,9 @@ public:
         cplex.setParam(IloCplex::Param::RootAlgorithm, IloCplex::Primal);
         cplex.setParam(IloCplex::Param::Benders::Strategy, IloCplex::BendersFull);
         cplex.setParam(IloCplex::Param::MIP::Tolerances::MIPGap, MIP_GAP);
+
+        // Nodos
+        cplex.setParam(IloCplex::Param::MIP::Limits::Nodes, 0);
     }
 
     ~TSCFLSolverCplex()

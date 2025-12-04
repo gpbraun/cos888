@@ -58,10 +58,6 @@ public:
     // Atualiza multiplicadores (l1,l2 ou m1,m2) e também multiplicadores dos cortes.
     virtual void update_multipliers(IloNum step) = 0;
 
-    // Acesso ao conjunto de cortes (para separação, logs, etc.)
-    FlowCoverCutSet &getCuts() { return cuts; }
-    const FlowCoverCutSet &getCuts() const { return cuts; }
-
     // Separa Flow Covers a partir da solução LR atual
     IloInt separate_flow_covers(IloInt max_new_cuts)
     {

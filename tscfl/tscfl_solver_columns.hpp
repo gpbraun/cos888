@@ -33,6 +33,7 @@ private:
     IloRangeArray constr_l1; // constr_l1[i]
     IloRangeArray constr_l2; // constr_l2[j]
     IloRangeArray constr_m2; // constr_m2[k]
+    IloArray<IloRangeArray> constrs_m1;
 
     IloObjective obj;
 
@@ -72,6 +73,7 @@ public:
           constr_l1(env, inst_.nI),
           constr_l2(env, inst_.nJ),
           constr_m2(env, inst_.nK),
+          constrs_m1(env, inst_.nJ),
           a(env, inst_.nI),
           b(env, inst_.nJ)
     {
@@ -83,6 +85,9 @@ public:
             z[k] = IloNumVarArray(env);
             col_info[k] = std::vector<ColumnInfo>();
         }
+        // Inicializa arrays de restrições (j,k)
+        for (int j = 0; j < inst.nJ; ++j)
+            constrs_m1[j] = IloRangeArray(env, inst.nK);
 
         build_initial_model();
         cplex.extract(model);
@@ -136,6 +141,17 @@ private:
             model.add(constr_m2[k]);
             e.end();
         }
+
+        // Restrição de vínculo
+        for (int j = 0; j < inst.nJ; ++j)
+            for (int k = 0; k < inst.nK; ++k)
+            {
+                IloExpr e(env);
+                e -= var_b[j];
+                constrs_m1[j][k] = (e <= 0.0);
+                model.add(constrs_m1[j][k]);
+                e.end();
+            }
 
         // OBJETIVO
         obj = IloMinimize(env, IloScalProd(inst.f, var_a) + IloScalProd(inst.g, var_b));
@@ -207,7 +223,10 @@ private:
 
         // Coluna: adiciona coeficientes na função objetivo e nas restrições
         IloNumColumn col = obj(cost);
-        col += constr_l1[i](inst.r[k]) + constr_l2[j](inst.r[k]) + constr_m2[k](1.0);
+        col += constr_l1[i](inst.r[k]) +
+               constr_l2[j](inst.r[k]) +
+               constr_m2[k](1.0) +
+               constrs_m1[j][k](1.0);
 
         IloNumVar z_var(col, 0.0, IloInfinity, ILOFLOAT);
         z[k].add(z_var);
@@ -231,6 +250,7 @@ public:
         auto &SP = *subproblem;
         IloNumArray a_h(env, inst.nI), b_h(env, inst.nJ);
         IloNumArray l1(env, inst.nI), l2(env, inst.nJ), m2(env, inst.nK);
+        IloNumMatrix m1(env, inst.nJ, inst.nK);
 
         if (log_output)
         {
@@ -283,11 +303,14 @@ public:
             if (ub < IloInfinity && lb > 0.0 && ub > lb + EPS)
                 gap = (ub - lb) / IloMax(1.0, IloAbs(ub));
 
-            // Pricing: tenta gerar novas colunas
+            // Recuperação dos duais
             cplex.getDuals(l1, constr_l1);
             cplex.getDuals(l2, constr_l2);
             cplex.getDuals(m2, constr_m2);
+            for (int j = 0; j < inst.nJ; ++j)
+                cplex.getDuals(m1[j], constrs_m1[j]);
 
+            // Pricing: tenta gerar novas colunas
             bool any_new = false;
             for (int k = 0; k < inst.nK; ++k)
             {
@@ -299,7 +322,9 @@ public:
                 for (int i = 0; i < inst.nI; ++i)
                     for (int j = 0; j < inst.nJ; ++j)
                     {
-                        IloNum rc = rk * (inst.c[i][j] + inst.d[j][k]) - rk * l1[i] - rk * l2[j] - m2[k];
+                        IloNum rc = rk * (inst.c[i][j] + inst.d[j][k]) -
+                                    rk * (l1[i] + l2[j]) - m2[k] - m1[j][k];
+
                         if (rc < best_rc - EPS)
                         {
                             best_rc = rc;
