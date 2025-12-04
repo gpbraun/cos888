@@ -21,8 +21,8 @@ private:
     // Variáveis duais
     IloNumVarArray var_l1; // l1[i] >= 0
     IloNumVarArray var_l2; // l2[j] >= 0
-    IloNumVarArray var_m1; // m1[j] (livre)
-    IloNumVarArray var_m2; // m2[k] (livre)
+    IloNumVarArray var_m1; // m1[j] livre
+    IloNumVarArray var_m2; // m2[k] livre
 
     // Função objetivo
     IloObjective obj;
@@ -64,13 +64,15 @@ private:
     void build_base_model()
     {
         // RESTRIÇÕES DO SUBPROBLEMA DUAL
+        // arcos planta -> depósito
         for (int i = 0; i < inst.nI; ++i)
             for (int j = 0; j < inst.nJ; ++j)
-                model.add(var_m1[j] - var_l1[i] <= inst.c[i][j]);
+                model.add(var_l1[i] + var_m1[j] <= inst.c[i][j]);
 
+        // arcos depósito -> cliente
         for (int j = 0; j < inst.nJ; ++j)
             for (int k = 0; k < inst.nK; ++k)
-                model.add(var_m2[k] - var_m1[j] - var_l2[j] <= inst.d[j][k]);
+                model.add(-var_m1[j] + var_l2[j] + var_m2[k] <= inst.d[j][k]);
 
         // FUNÇÃO OBJETIVO
         model.add(obj);
@@ -82,9 +84,9 @@ private:
         IloExpr obj_expr(env);
 
         for (int i = 0; i < inst.nI; ++i)
-            obj_expr += -(inst.p[i] * a_vals[i]) * var_l1[i];
+            obj_expr += (inst.p[i] * a_vals[i]) * var_l1[i];
         for (int j = 0; j < inst.nJ; ++j)
-            obj_expr += -(inst.q[j] * b_vals[j]) * var_l2[j];
+            obj_expr += (inst.q[j] * b_vals[j]) * var_l2[j];
         for (int k = 0; k < inst.nK; ++k)
             obj_expr += inst.r[k] * var_m2[k];
 
@@ -104,14 +106,15 @@ public:
         if (!cplex.solve())
             throw std::runtime_error("SubproblemDual: falha no CPLEX.");
 
-        // 3) Calcula os coeficientes do corte
+        // 3) Valor ótimo do dual
         theta = cplex.getObjValue();
 
+        // 4) Coeficientes do corte de Benders
         for (int i = 0; i < inst.nI; ++i)
-            coef_a[i] = -inst.p[i] * cplex.getValue(var_l1[i]);
+            coef_a[i] = inst.p[i] * cplex.getValue(var_l1[i]);
 
         for (int j = 0; j < inst.nJ; ++j)
-            coef_b[j] = -inst.q[j] * cplex.getValue(var_l2[j]);
+            coef_b[j] = inst.q[j] * cplex.getValue(var_l2[j]);
 
         rhs = 0.0;
         for (int k = 0; k < inst.nK; ++k)

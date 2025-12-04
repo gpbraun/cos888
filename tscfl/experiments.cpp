@@ -56,7 +56,7 @@ int main()
         for (const auto &path : instance_paths)
         {
             ++inst_id;
-            std::cout << "\n\n>>> Rodando instancia #" << inst_id
+            std::cout << "\n\n>>> Instancia #" << inst_id
                       << " : " << path << "\n";
 
             out << "====================================================\n";
@@ -69,7 +69,7 @@ int main()
             TSCFLInstance inst = TSCFLInstance::from_txt(env, path);
 
             // -----------------------------------------------------------------
-            // [LP] – valor ótimo da relaxação linear
+            // [LP] 0 valor ótimo da relaxação linear
             // -----------------------------------------------------------------
             {
                 TSCFLSolverLP solver_lp(inst);
@@ -82,7 +82,7 @@ int main()
             out.flush();
 
             // -----------------------------------------------------------------
-            // [MP] – modelo inteiro resolvido diretamente no CPLEX
+            // [MP] - modelo inteiro resolvido diretamente no CPLEX
             // lb, ub, time
             // -----------------------------------------------------------------
             {
@@ -100,14 +100,14 @@ int main()
             out.flush();
 
             // -----------------------------------------------------------------
-            // [CG-*] – Geração de colunas
-            // lb, ub, iter, time  (usando nodes como "iter")
+            // [CG] - Geração de colunas
+            // lb, ub, iter, time
             // -----------------------------------------------------------------
             {
                 // Subproblema Network
                 TSCFLSolverColumnGeneration solver_cg_net(inst, Subproblem::Mode::NET);
                 solver_cg_net.solve(false, time_limit);
-                out << "[CG-n] "
+                out << "[CG] "
                     << std::fixed << std::setprecision(0)
                     << solver_cg_net.lb << "  "
                     << solver_cg_net.ub << "  "
@@ -118,12 +118,12 @@ int main()
             out.flush();
 
             // -----------------------------------------------------------------
-            // [RC-*] – Relax-and-Cut via subgradiente
-            // lb, ub, iter, time  (usando nodes como "iter")
+            // [RC] - Relax-and-Cut via subgradiente
+            // lb, ub, iter, time
             // -----------------------------------------------------------------
             {
                 // Subproblema Network
-                TSCFLSolverSubgradient solver_rc_net(inst, Relaxation::Mode::CAPACITIES, Subproblem::Mode::NET);
+                TSCFLSolverSubgradient solver_rc_net(inst, Relaxation::Mode::CAPACITIES);
                 solver_rc_net.solve(false, time_limit);
                 out << "[RC-n] "
                     << solver_rc_net.lb << "  "
@@ -134,7 +134,7 @@ int main()
             out.flush();
 
             // -----------------------------------------------------------------
-            // [BD-*] – Benders
+            // [BD-*] 0 Benders
             // lb, ub, nodes, time
             // -----------------------------------------------------------------
             // {

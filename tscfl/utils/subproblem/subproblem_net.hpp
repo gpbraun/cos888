@@ -296,14 +296,14 @@ public:
         //   m2_k  = pi_s - pi_cust(k)
         for (int i = 0; i < nI; ++i)
         {
-            double l1_i = -dj[arcPlantCap[i]];
-            coef_a[i] = -inst.p[i] * l1_i;
+            double l1_i = dj[arcPlantCap[i]];
+            coef_a[i] = inst.p[i] * l1_i;
         }
 
         for (int j = 0; j < nJ; ++j)
         {
-            double l2_j = -dj[arcDepotCap[j]];
-            coef_b[j] = -inst.q[j] * l2_j;
+            double l2_j = dj[arcDepotCap[j]];
+            coef_b[j] = inst.q[j] * l2_j;
         }
 
         auto nodeCust = [nI, nJ](int k)

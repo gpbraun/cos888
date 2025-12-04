@@ -69,13 +69,13 @@ private:
         // Capacidade das plantas
         for (int i = 0; i < inst.nI; ++i)
         {
-            constr_l1[i] = IloRange(env, -IloInfinity, -IloSum(var_x[i]), IloInfinity);
+            constr_l1[i] = IloRange(env, -IloInfinity, IloSum(var_x[i]), IloInfinity);
             model.add(constr_l1[i]);
         }
         // Capacidade dos depósitos
         for (int j = 0; j < inst.nJ; ++j)
         {
-            constr_l2[j] = IloRange(env, -IloInfinity, -IloSum(var_y[j]), IloInfinity);
+            constr_l2[j] = IloRange(env, -IloInfinity, IloSum(var_y[j]), IloInfinity);
             model.add(constr_l2[j]);
         }
         // Balanço nos depósitos
@@ -101,11 +101,11 @@ private:
     {
         // Capacidade das plantas
         for (int i = 0; i < inst.nI; ++i)
-            constr_l1[i].setBounds(-inst.p[i] * a_vals[i], IloInfinity);
+            constr_l1[i].setBounds(-IloInfinity, inst.p[i] * a_vals[i]);
 
         // Capacidade dos depósitos
         for (int j = 0; j < inst.nJ; ++j)
-            constr_l2[j].setBounds(-inst.q[j] * b_vals[j], IloInfinity);
+            constr_l2[j].setBounds(-IloInfinity, inst.q[j] * b_vals[j]);
     }
 
 public:
@@ -130,10 +130,10 @@ public:
 
         // 4) Calcula os coeficientes do corte
         for (int i = 0; i < inst.nI; ++i)
-            coef_a[i] = -inst.p[i] * l1[i];
+            coef_a[i] = inst.p[i] * l1[i];
 
         for (int j = 0; j < inst.nJ; ++j)
-            coef_b[j] = -inst.q[j] * l2[j];
+            coef_b[j] = inst.q[j] * l2[j];
 
         rhs = IloScalProd(inst.r, m2);
 

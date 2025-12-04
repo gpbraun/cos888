@@ -34,7 +34,6 @@ def solve_instance_cp(
     #   U_j = #used containers (from pack)
     L = mdl.integer_var_list(inst.nI, 0, inst.r.sum(), name="L")
     N = mdl.integer_var_list(inst.nI, 0, inst.nJ, name="N")
-    U = mdl.integer_var(0, inst.nI, name="U")
 
     # FILTRO: Só permite plantas que suportam a demanda do cliente
     for j in inst.J:
@@ -46,7 +45,7 @@ def solve_instance_cp(
 
     # GLOBAL CONSTRAINTS
     # Bin packing das demandas (r) nas plantas (pela variável Y)
-    mdl.add(mdl.pack(L, Y, inst.r, used=U))
+    mdl.add(mdl.pack(L, Y, inst.r))
     # Conta quantos clientes cada planta recebe
     mdl.add(mdl.distribute(N, Y, values=inst.I))
 
