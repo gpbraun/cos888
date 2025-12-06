@@ -57,10 +57,10 @@ RM = /usr/bin/cmake -E rm -f
 EQUALS = =
 
 # The top-level source directory on which CMake was run.
-CMAKE_SOURCE_DIR = /home/braun/Developer/cos888/tscfl
+CMAKE_SOURCE_DIR = /home/braun/Documents/Developer/cos888/tscfl
 
 # The top-level build directory on which CMake was run.
-CMAKE_BINARY_DIR = /home/braun/Developer/cos888
+CMAKE_BINARY_DIR = /home/braun/Documents/Developer/cos888
 
 #=============================================================================
 # Targets provided globally by CMake.
@@ -87,9 +87,9 @@ rebuild_cache/fast: rebuild_cache
 
 # The main all target
 all: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/braun/Developer/cos888/CMakeFiles /home/braun/Developer/cos888//CMakeFiles/progress.marks
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/braun/Documents/Developer/cos888/CMakeFiles /home/braun/Documents/Developer/cos888//CMakeFiles/progress.marks
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 all
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/braun/Developer/cos888/CMakeFiles 0
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/braun/Documents/Developer/cos888/CMakeFiles 0
 .PHONY : all
 
 # The main clean target
@@ -165,6 +165,30 @@ experiments/tscfl_experiments.s: experiments/tscfl_experiments.cpp.s
 experiments/tscfl_experiments.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tscfl_experiments.dir/build.make CMakeFiles/tscfl_experiments.dir/experiments/tscfl_experiments.cpp.s
 .PHONY : experiments/tscfl_experiments.cpp.s
+
+src/lrp/tscfl_cut_manager.o: src/lrp/tscfl_cut_manager.cpp.o
+.PHONY : src/lrp/tscfl_cut_manager.o
+
+# target to build an object file
+src/lrp/tscfl_cut_manager.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tscfl.dir/build.make CMakeFiles/tscfl.dir/src/lrp/tscfl_cut_manager.cpp.o
+.PHONY : src/lrp/tscfl_cut_manager.cpp.o
+
+src/lrp/tscfl_cut_manager.i: src/lrp/tscfl_cut_manager.cpp.i
+.PHONY : src/lrp/tscfl_cut_manager.i
+
+# target to preprocess a source file
+src/lrp/tscfl_cut_manager.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tscfl.dir/build.make CMakeFiles/tscfl.dir/src/lrp/tscfl_cut_manager.cpp.i
+.PHONY : src/lrp/tscfl_cut_manager.cpp.i
+
+src/lrp/tscfl_cut_manager.s: src/lrp/tscfl_cut_manager.cpp.s
+.PHONY : src/lrp/tscfl_cut_manager.s
+
+# target to generate assembly for a file
+src/lrp/tscfl_cut_manager.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tscfl.dir/build.make CMakeFiles/tscfl.dir/src/lrp/tscfl_cut_manager.cpp.s
+.PHONY : src/lrp/tscfl_cut_manager.cpp.s
 
 src/lrp/tscfl_lrp.o: src/lrp/tscfl_lrp.cpp.o
 .PHONY : src/lrp/tscfl_lrp.o
@@ -261,6 +285,30 @@ src/solvers/tscfl_solver_benders.s: src/solvers/tscfl_solver_benders.cpp.s
 src/solvers/tscfl_solver_benders.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tscfl.dir/build.make CMakeFiles/tscfl.dir/src/solvers/tscfl_solver_benders.cpp.s
 .PHONY : src/solvers/tscfl_solver_benders.cpp.s
+
+src/solvers/tscfl_solver_column_generation.o: src/solvers/tscfl_solver_column_generation.cpp.o
+.PHONY : src/solvers/tscfl_solver_column_generation.o
+
+# target to build an object file
+src/solvers/tscfl_solver_column_generation.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tscfl.dir/build.make CMakeFiles/tscfl.dir/src/solvers/tscfl_solver_column_generation.cpp.o
+.PHONY : src/solvers/tscfl_solver_column_generation.cpp.o
+
+src/solvers/tscfl_solver_column_generation.i: src/solvers/tscfl_solver_column_generation.cpp.i
+.PHONY : src/solvers/tscfl_solver_column_generation.i
+
+# target to preprocess a source file
+src/solvers/tscfl_solver_column_generation.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tscfl.dir/build.make CMakeFiles/tscfl.dir/src/solvers/tscfl_solver_column_generation.cpp.i
+.PHONY : src/solvers/tscfl_solver_column_generation.cpp.i
+
+src/solvers/tscfl_solver_column_generation.s: src/solvers/tscfl_solver_column_generation.cpp.s
+.PHONY : src/solvers/tscfl_solver_column_generation.s
+
+# target to generate assembly for a file
+src/solvers/tscfl_solver_column_generation.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tscfl.dir/build.make CMakeFiles/tscfl.dir/src/solvers/tscfl_solver_column_generation.cpp.s
+.PHONY : src/solvers/tscfl_solver_column_generation.cpp.s
 
 src/solvers/tscfl_solver_cplex.o: src/solvers/tscfl_solver_cplex.cpp.o
 .PHONY : src/solvers/tscfl_solver_cplex.o
@@ -467,6 +515,9 @@ help:
 	@echo "... experiments/tscfl_experiments.o"
 	@echo "... experiments/tscfl_experiments.i"
 	@echo "... experiments/tscfl_experiments.s"
+	@echo "... src/lrp/tscfl_cut_manager.o"
+	@echo "... src/lrp/tscfl_cut_manager.i"
+	@echo "... src/lrp/tscfl_cut_manager.s"
 	@echo "... src/lrp/tscfl_lrp.o"
 	@echo "... src/lrp/tscfl_lrp.i"
 	@echo "... src/lrp/tscfl_lrp.s"
@@ -479,6 +530,9 @@ help:
 	@echo "... src/solvers/tscfl_solver_benders.o"
 	@echo "... src/solvers/tscfl_solver_benders.i"
 	@echo "... src/solvers/tscfl_solver_benders.s"
+	@echo "... src/solvers/tscfl_solver_column_generation.o"
+	@echo "... src/solvers/tscfl_solver_column_generation.i"
+	@echo "... src/solvers/tscfl_solver_column_generation.s"
 	@echo "... src/solvers/tscfl_solver_cplex.o"
 	@echo "... src/solvers/tscfl_solver_cplex.i"
 	@echo "... src/solvers/tscfl_solver_cplex.s"

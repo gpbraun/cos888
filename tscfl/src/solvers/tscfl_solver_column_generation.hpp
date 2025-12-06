@@ -16,55 +16,57 @@ Gabriel Braun, 2025
 
 ILOSTLBEGIN
 
-class TSCFLSolverColumnGeneration : public TSCFLSolver {
-   public:
-    IloInt iter{0};
+class TSCFLSolverColumnGeneration : public TSCFLSolver
+{
+  public:
+    IloInt iter{ 0 };
 
-   public:
+  public:
     // Parâmetros do método
     static constexpr IloInt PRINT_EVERY = 10;
 
-   private:
+  private:
     IloModel model;
     IloCplex cplex;
     std::unique_ptr<Subproblem> subproblem;
 
     // Variáveis do RMP
-    IloNumVarArray var_a;  // a[i]
-    IloNumVarArray var_b;  // b[j]
+    IloNumVarArray var_a; // a[i]
+    IloNumVarArray var_b; // b[j]
 
     // Restrições
-    IloRangeArray constr_l1;             // capacidade plantas: i
-    IloRangeArray constr_l2;             // capacidade depósitos: j
-    IloRangeArray constr_m2;             // convexidade/demanda: k
-    IloArray<IloRangeArray> constrs_m1;  // vínculo b_j >= z_{j,k}: (j,k)
+    IloRangeArray constr_l1;            // capacidade plantas: i
+    IloRangeArray constr_l2;            // capacidade depósitos: j
+    IloRangeArray constr_m2;            // convexidade/demanda: k
+    IloArray<IloRangeArray> constrs_m1; // vínculo b_j >= z_{j,k}: (j,k)
 
     IloObjective obj;
 
     // Colunas (padrões) por cliente
-    struct ColumnInfo {
-        int i;  // planta
-        int j;  // depósito
+    struct ColumnInfo
+    {
+        int i; // planta
+        int j; // depósito
     };
-    std::vector<std::vector<ColumnInfo>> col_info;  // col_info[k][t] = (i,j) do padrão t de k
-    std::vector<IloNumVarArray> z;                  // z[k][t]
+    std::vector<std::vector<ColumnInfo>> col_info; // col_info[k][t] = (i,j) do padrão t de k
+    std::vector<IloNumVarArray> z;                 // z[k][t]
 
-   public:
+  public:
     // Melhor solução primal inteira encontrada
     IloNumArray a;
     IloNumArray b;
 
-    explicit TSCFLSolverColumnGeneration(const TSCFLInstance& inst_,
-                                         Subproblem::Mode smode = Subproblem::Mode::NET);
+    explicit TSCFLSolverColumnGeneration (const TSCFLInstance &inst_,
+                                          Subproblem::Mode smode = Subproblem::Mode::NET);
 
-    ~TSCFLSolverColumnGeneration() override;
+    ~TSCFLSolverColumnGeneration () override;
 
-    bool solve(bool log_output = true, IloNum time_limit = -1.0);
+    bool solve (bool log_output = true, IloNum time_limit = -1.0);
 
-   private:
-    void build_initial_model();
+  private:
+    void build_initial_model ();
 
-    void add_column_for_client(int k, int i, int j);
+    void add_column_for_client (int k, int i, int j);
 
-    IloInt get_num_columns() const;
+    IloInt get_num_columns () const;
 };

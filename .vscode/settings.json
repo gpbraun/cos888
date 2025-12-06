@@ -1,7 +1,5 @@
 {
-  "editor.rulers": [
-    100
-  ],
+  "editor.rulers": [100],
   "editor.formatOnSave": true,
   "code-runner.runInTerminal": true,
   "code-runner.ignoreSelection": true,
@@ -25,5 +23,5 @@
     "CPLUS_INCLUDE_PATH": "${env:ILOG}/concert/include:${env:ILOG}/cplex/include:${env:ILOG}/cpoptimizer/include:${env:ILOG}",
     "LIBRARY_PATH": "${env:ILOG}/cpoptimizer/lib/x86-64_linux:${env:ILOG}/concert/lib/x86-64_linux:${env:ILOG}/cplex/lib/x86-64_linux:${env:LIBRARY_PATH}"
   },
-  "cmake.sourceDirectory": "/home/braun/Developer/cos888/tscfl",
+  "cmake.sourceDirectory": "/home/braun/Documents/Developer/cos888/tscfl"
 }
