@@ -17,11 +17,11 @@ class TSCFLSolverCplex : public TSCFLSolver
     IloNumVarMatrix var_y; // y[j][k]
 
   public:
-    explicit TSCFLSolverCplex (const TSCFLInstance &inst_);
-    ~TSCFLSolverCplex ();
+    explicit TSCFLSolverCplex(const TSCFLInstance &inst_);
+    ~TSCFLSolverCplex();
 
-    bool solve (bool log_output = true, double time_limit = -1.0) override;
+    bool solve(bool log_output = true, double time_limit = -1.0) override;
 
   private:
-    void build_model ();
+    void build_model();
 };

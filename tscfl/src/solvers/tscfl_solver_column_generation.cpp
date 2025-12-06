@@ -10,47 +10,56 @@ ILOSTLBEGIN
 // Construtor / Destrutor
 // ---------------------------------------------------------------------
 
-TSCFLSolverColumnGeneration::TSCFLSolverColumnGeneration (const TSCFLInstance &inst_,
-                                                          Subproblem::Mode smode)
-    : TSCFLSolver (inst_), model (env), cplex (env), subproblem (Subproblem::create (inst_, smode)),
-      obj (env), var_a (env, inst_.nI, 0.0, 1.0, ILOFLOAT),
-      var_b (env, inst_.nJ, 0.0, 1.0, ILOFLOAT), constr_l1 (env, inst_.nI),
-      constr_l2 (env, inst_.nJ), constr_m2 (env, inst_.nK), constrs_m1 (env, inst_.nJ),
-      a (env, inst_.nI), b (env, inst_.nJ)
+TSCFLSolverColumnGeneration::TSCFLSolverColumnGeneration(
+    const TSCFLInstance &inst_, Subproblem::Mode smode
+)
+    : TSCFLSolver(inst_),
+      model(env),
+      cplex(env),
+      subproblem(Subproblem::create(inst_, smode)),
+      obj(env),
+      var_a(env, inst_.nI, 0.0, 1.0, ILOFLOAT),
+      var_b(env, inst_.nJ, 0.0, 1.0, ILOFLOAT),
+      constr_l1(env, inst_.nI),
+      constr_l2(env, inst_.nJ),
+      constr_m2(env, inst_.nK),
+      constrs_m1(env, inst_.nJ),
+      a(env, inst_.nI),
+      b(env, inst_.nJ)
 {
     // Inicializa vetores de colunas e infos
-    z.resize (inst.nK);
-    col_info.resize (inst.nK);
+    z.resize(inst.nK);
+    col_info.resize(inst.nK);
     for (IloInt k = 0; k < inst.nK; ++k)
         {
-            z[k] = IloNumVarArray (env);
-            col_info[k] = std::vector<ColumnInfo> ();
+            z[k] = IloNumVarArray(env);
+            col_info[k] = std::vector<ColumnInfo>();
         }
 
     // Inicializa arrays de restrições (j,k)
     for (IloInt j = 0; j < inst.nJ; ++j)
         {
-            constrs_m1[j] = IloRangeArray (env, inst.nK);
+            constrs_m1[j] = IloRangeArray(env, inst.nK);
         }
 
-    build_initial_model ();
-    cplex.extract (model);
+    build_initial_model();
+    cplex.extract(model);
 
     // Parâmetros do CPLEX (RMP)
-    cplex.setParam (IloCplex::Param::Threads, 1);
-    cplex.setParam (IloCplex::Param::Preprocessing::Presolve, 0);
-    cplex.setParam (IloCplex::Param::Preprocessing::Aggregator, 0);
-    cplex.setParam (IloCplex::Param::RootAlgorithm, IloCplex::Primal);
+    cplex.setParam(IloCplex::Param::Threads, 1);
+    cplex.setParam(IloCplex::Param::Preprocessing::Presolve, 0);
+    cplex.setParam(IloCplex::Param::Preprocessing::Aggregator, 0);
+    cplex.setParam(IloCplex::Param::RootAlgorithm, IloCplex::Primal);
 
     // RMP silencioso por padrão
-    cplex.setOut (env.getNullStream ());
-    cplex.setWarning (env.getNullStream ());
+    cplex.setOut(env.getNullStream());
+    cplex.setWarning(env.getNullStream());
 }
 
-TSCFLSolverColumnGeneration::~TSCFLSolverColumnGeneration ()
+TSCFLSolverColumnGeneration::~TSCFLSolverColumnGeneration()
 {
-    cplex.end ();
-    model.end ();
+    cplex.end();
+    model.end();
 }
 
 // ---------------------------------------------------------------------
@@ -58,7 +67,7 @@ TSCFLSolverColumnGeneration::~TSCFLSolverColumnGeneration ()
 // ---------------------------------------------------------------------
 
 void
-TSCFLSolverColumnGeneration::build_initial_model ()
+TSCFLSolverColumnGeneration::build_initial_model()
 {
     // -------------------------------------------------------------
     // 1) Restrições de capacidade das plantas: constr_l1[i]
@@ -66,11 +75,11 @@ TSCFLSolverColumnGeneration::build_initial_model ()
     // -------------------------------------------------------------
     for (IloInt i = 0; i < inst.nI; ++i)
         {
-            IloExpr e (env);
+            IloExpr e(env);
             e -= inst.p[i] * var_a[i];
             constr_l1[i] = (e <= 0.0);
-            model.add (constr_l1[i]);
-            e.end ();
+            model.add(constr_l1[i]);
+            e.end();
         }
 
     // -------------------------------------------------------------
@@ -79,11 +88,11 @@ TSCFLSolverColumnGeneration::build_initial_model ()
     // -------------------------------------------------------------
     for (IloInt j = 0; j < inst.nJ; ++j)
         {
-            IloExpr e (env);
+            IloExpr e(env);
             e -= inst.q[j] * var_b[j];
             constr_l2[j] = (e <= 0.0);
-            model.add (constr_l2[j]);
-            e.end ();
+            model.add(constr_l2[j]);
+            e.end();
         }
 
     // -------------------------------------------------------------
@@ -92,10 +101,10 @@ TSCFLSolverColumnGeneration::build_initial_model ()
     // -------------------------------------------------------------
     for (IloInt k = 0; k < inst.nK; ++k)
         {
-            IloExpr e (env);
+            IloExpr e(env);
             constr_m2[k] = (e == 1.0);
-            model.add (constr_m2[k]);
-            e.end ();
+            model.add(constr_m2[k]);
+            e.end();
         }
 
     // -------------------------------------------------------------
@@ -109,11 +118,11 @@ TSCFLSolverColumnGeneration::build_initial_model ()
         {
             for (IloInt k = 0; k < inst.nK; ++k)
                 {
-                    IloExpr e (env);
+                    IloExpr e(env);
                     e -= var_b[j];
                     constrs_m1[j][k] = (e <= 0.0);
-                    model.add (constrs_m1[j][k]);
-                    e.end ();
+                    model.add(constrs_m1[j][k]);
+                    e.end();
                 }
         }
 
@@ -121,18 +130,18 @@ TSCFLSolverColumnGeneration::build_initial_model ()
     // 5) Objetivo: f^T a + g^T b + sum_{k,t} cost_{k,it} z_{k,t}
     //    (parte dos z é construída nas colunas)
     // -------------------------------------------------------------
-    obj = IloMinimize (env, IloScalProd (inst.f, var_a) + IloScalProd (inst.g, var_b));
-    model.add (obj);
+    obj = IloMinimize(env, IloScalProd(inst.f, var_a) + IloScalProd(inst.g, var_b));
+    model.add(obj);
 
     // -------------------------------------------------------------
     // 6) Construção das colunas iniciais
     //    - Geramos um fluxo capacidade-viável "flow[i][j][k]"
     //      por um esquema guloso simples.
     // -------------------------------------------------------------
-    IloNumTensor flow (env, inst.nI, inst.nJ, inst.nK);
-    IloNumArray p_remaining = inst.p.copy ();
-    IloNumArray q_remaining = inst.q.copy ();
-    IloNumArray r_remaining = inst.r.copy ();
+    IloNumTensor flow(env, inst.nI, inst.nJ, inst.nK);
+    IloNumArray p_remaining = inst.p.copy();
+    IloNumArray q_remaining = inst.q.copy();
+    IloNumArray r_remaining = inst.r.copy();
 
     for (IloInt k = 0; k < inst.nK; ++k)
         {
@@ -169,8 +178,8 @@ TSCFLSolverColumnGeneration::build_initial_model ()
                             break;
                         }
 
-                    IloNum delta = IloMin (r_remaining[k],
-                                           IloMin (p_remaining[best_i], q_remaining[best_j]));
+                    IloNum delta
+                        = IloMin(r_remaining[k], IloMin(p_remaining[best_i], q_remaining[best_j]));
 
                     if (delta <= EPS)
                         break;
@@ -191,17 +200,19 @@ TSCFLSolverColumnGeneration::build_initial_model ()
                         {
                             if (flow[i][j][k] > EPS)
                                 {
-                                    add_column_for_client (static_cast<int> (k),
-                                                           static_cast<int> (i),
-                                                           static_cast<int> (j));
+                                    add_column_for_client(
+                                        static_cast<int>(k),
+                                        static_cast<int>(i),
+                                        static_cast<int>(j)
+                                    );
                                 }
                         }
                 }
 
             // Segurança: se nenhum padrão foi gerado para k, cria um "dummy"
-            if (z[k].getSize () == 0)
+            if (z[k].getSize() == 0)
                 {
-                    add_column_for_client (static_cast<int> (k), 0, 0);
+                    add_column_for_client(static_cast<int>(k), 0, 0);
                 }
         }
 }
@@ -211,16 +222,16 @@ TSCFLSolverColumnGeneration::build_initial_model ()
 // ---------------------------------------------------------------------
 
 void
-TSCFLSolverColumnGeneration::add_column_for_client (int k, int i, int j)
+TSCFLSolverColumnGeneration::add_column_for_client(int k, int i, int j)
 {
-    col_info[k].push_back ({ i, j });
+    col_info[k].push_back({ i, j });
 
     // Custo do padrão (i,j) para o cliente k:
     const IloNum rk = inst.r[k];
     const IloNum cost = rk * (inst.c[i][j] + inst.d[j][k]);
 
     // Coluna na função objetivo e nas restrições
-    IloNumColumn col = obj (cost);
+    IloNumColumn col = obj(cost);
 
     // Capacidade planta i: coeficiente = r_k
     col += constr_l1[i](rk);
@@ -234,9 +245,9 @@ TSCFLSolverColumnGeneration::add_column_for_client (int k, int i, int j)
     // Vínculo z_{k,*} <= b_j: coeficiente = 1 em (j,k)
     col += constrs_m1[j][k](1.0);
 
-    IloNumVar z_var (col, 0.0, IloInfinity, ILOFLOAT);
-    z[k].add (z_var);
-    model.add (z_var);
+    IloNumVar z_var(col, 0.0, IloInfinity, ILOFLOAT);
+    z[k].add(z_var);
+    model.add(z_var);
 }
 
 // ---------------------------------------------------------------------
@@ -244,12 +255,12 @@ TSCFLSolverColumnGeneration::add_column_for_client (int k, int i, int j)
 // ---------------------------------------------------------------------
 
 IloInt
-TSCFLSolverColumnGeneration::get_num_columns () const
+TSCFLSolverColumnGeneration::get_num_columns() const
 {
     IloInt total = 0;
     for (IloInt k = 0; k < inst.nK; ++k)
         {
-            total += z[k].getSize ();
+            total += z[k].getSize();
         }
     return total;
 }
@@ -259,40 +270,40 @@ TSCFLSolverColumnGeneration::get_num_columns () const
 // ---------------------------------------------------------------------
 
 bool
-TSCFLSolverColumnGeneration::solve (bool log_output, IloNum time_limit)
+TSCFLSolverColumnGeneration::solve(bool log_output, IloNum time_limit)
 {
     auto &SP = *subproblem;
 
-    IloNumArray a_lr (env, inst.nI);
-    IloNumArray b_lr (env, inst.nJ);
-    IloNumArray a_h (env, inst.nI);
-    IloNumArray b_h (env, inst.nJ);
+    IloNumArray a_lr(env, inst.nI);
+    IloNumArray b_lr(env, inst.nJ);
+    IloNumArray a_h(env, inst.nI);
+    IloNumArray b_h(env, inst.nJ);
 
-    IloNumArray l1 (env, inst.nI);
-    IloNumArray l2 (env, inst.nJ);
-    IloNumArray m2 (env, inst.nK);
-    IloNumMatrix m1 (env, inst.nJ, inst.nK);
+    IloNumArray l1(env, inst.nI);
+    IloNumArray l2(env, inst.nJ);
+    IloNumArray m2(env, inst.nK);
+    IloNumMatrix m1(env, inst.nJ, inst.nK);
 
     if (log_output)
         {
             std::cout << "[CG] Iniciando Geração de Colunas\n";
-            std::cout << std::right << std::setw (5) << "it" << std::setw (10) << "time(s)"
-                      << std::setw (15) << "LB" << std::setw (15) << "UB" << std::setw (12) << "gap"
-                      << std::setw (10) << "cols"
+            std::cout << std::right << std::setw(5) << "it" << std::setw(10) << "time(s)"
+                      << std::setw(15) << "LB" << std::setw(15) << "UB" << std::setw(12) << "gap"
+                      << std::setw(10) << "cols"
                       << "\n"
-                      << std::string (70, '-') << "\n"
+                      << std::string(70, '-') << "\n"
                       << std::defaultfloat;
         }
 
-    auto t0 = std::chrono::steady_clock::now ();
+    auto t0 = std::chrono::steady_clock::now();
 
     while (true)
         {
             // ---------------------------------------------------------
             // Controle de tempo
             // ---------------------------------------------------------
-            auto t1 = std::chrono::steady_clock::now ();
-            IloNum elapsed = std::chrono::duration<IloNum> (t1 - t0).count ();
+            auto t1 = std::chrono::steady_clock::now();
+            IloNum elapsed = std::chrono::duration<IloNum>(t1 - t0).count();
 
             if (time_limit > 0.0)
                 {
@@ -300,29 +311,29 @@ TSCFLSolverColumnGeneration::solve (bool log_output, IloNum time_limit)
                         {
                             break;
                         }
-                    cplex.setParam (IloCplex::Param::TimeLimit, time_limit - elapsed);
+                    cplex.setParam(IloCplex::Param::TimeLimit, time_limit - elapsed);
                 }
 
             // ---------------------------------------------------------
             // Resolve o RMP atual
             // ---------------------------------------------------------
-            if (!cplex.solve ())
+            if (!cplex.solve())
                 {
-                    status = cplex.getStatus ();
+                    status = cplex.getStatus();
                     std::cerr << "[CG] RMP inviável ou erro. Status = " << status << "\n";
                     return false;
                 }
 
-            status = cplex.getStatus ();
-            lb = cplex.getObjValue ();
+            status = cplex.getStatus();
+            lb = cplex.getObjValue();
 
             // ---------------------------------------------------------
             // Heurística primal: a partir de (a,b) fracionários do RMP
             // ---------------------------------------------------------
-            cplex.getValues (var_a, a_lr);
-            cplex.getValues (var_b, b_lr);
+            cplex.getValues(var_a, a_lr);
+            cplex.getValues(var_b, b_lr);
 
-            IloNum opt_h = SP.solve_primal_heuristic (a_lr, b_lr, a_h, b_h);
+            IloNum opt_h = SP.solve_primal_heuristic(a_lr, b_lr, a_h, b_h);
             if (opt_h + EPS < ub)
                 {
                     ub = opt_h;
@@ -332,18 +343,18 @@ TSCFLSolverColumnGeneration::solve (bool log_output, IloNum time_limit)
 
             if (ub < IloInfinity && lb > 0.0 && ub > lb + EPS)
                 {
-                    gap = (ub - lb) / IloMax (1.0, IloAbs (ub));
+                    gap = (ub - lb) / IloMax(1.0, IloAbs(ub));
                 }
 
             // ---------------------------------------------------------
             // Recupera duais para fazer pricing
             // ---------------------------------------------------------
-            cplex.getDuals (l1, constr_l1);
-            cplex.getDuals (l2, constr_l2);
-            cplex.getDuals (m2, constr_m2);
+            cplex.getDuals(l1, constr_l1);
+            cplex.getDuals(l2, constr_l2);
+            cplex.getDuals(m2, constr_m2);
             for (IloInt j = 0; j < inst.nJ; ++j)
                 {
-                    cplex.getDuals (m1[j], constrs_m1[j]);
+                    cplex.getDuals(m1[j], constrs_m1[j]);
                 }
 
             // ---------------------------------------------------------
@@ -383,8 +394,11 @@ TSCFLSolverColumnGeneration::solve (bool log_output, IloNum time_limit)
 
                     if (best_i != -1)
                         {
-                            add_column_for_client (static_cast<int> (k), static_cast<int> (best_i),
-                                                   static_cast<int> (best_j));
+                            add_column_for_client(
+                                static_cast<int>(k),
+                                static_cast<int>(best_i),
+                                static_cast<int>(best_j)
+                            );
                             any_new = true;
                         }
                 }
@@ -394,11 +408,11 @@ TSCFLSolverColumnGeneration::solve (bool log_output, IloNum time_limit)
             // ---------------------------------------------------------
             if (log_output && (iter % PRINT_EVERY == 0 || !any_new))
                 {
-                    std::cout << std::right << std::setw (5) << iter << std::fixed
-                              << std::setprecision (1) << std::setw (10) << elapsed
-                              << std::setprecision (0) << std::setw (15) << lb << std::setw (15)
-                              << ub << std::scientific << std::setprecision (2) << std::setw (12)
-                              << gap << std::fixed << std::setw (10) << get_num_columns () << "\n"
+                    std::cout << std::right << std::setw(5) << iter << std::fixed
+                              << std::setprecision(1) << std::setw(10) << elapsed
+                              << std::setprecision(0) << std::setw(15) << lb << std::setw(15) << ub
+                              << std::scientific << std::setprecision(2) << std::setw(12) << gap
+                              << std::fixed << std::setw(10) << get_num_columns() << "\n"
                               << std::defaultfloat;
                 }
 
@@ -414,8 +428,8 @@ TSCFLSolverColumnGeneration::solve (bool log_output, IloNum time_limit)
             ++iter;
         }
 
-    auto t_end = std::chrono::steady_clock::now ();
-    time = std::chrono::duration<IloNum> (t_end - t0).count ();
+    auto t_end = std::chrono::steady_clock::now();
+    time = std::chrono::duration<IloNum>(t_end - t0).count();
 
     if (status == IloAlgorithm::Unknown)
         {
@@ -429,11 +443,11 @@ TSCFLSolverColumnGeneration::solve (bool log_output, IloNum time_limit)
     std::cout << "\n\n"
               << "[CG] Geração de colunas finalizado.\n\n"
               << "status = " << status << "\n"
-              << std::fixed << std::setprecision (0) << "iter   = " << iter << "\n"
-              << std::fixed << std::setprecision (1) << "time   = " << time << " s\n"
-              << std::fixed << std::setprecision (0) << "LB     = " << lb << "\n"
+              << std::fixed << std::setprecision(0) << "iter   = " << iter << "\n"
+              << std::fixed << std::setprecision(1) << "time   = " << time << " s\n"
+              << std::fixed << std::setprecision(0) << "LB     = " << lb << "\n"
               << "UB     = " << ub << "\n"
-              << std::scientific << std::setprecision (2) << "gap    = " << gap << "\n"
+              << std::scientific << std::setprecision(2) << "gap    = " << gap << "\n"
               << std::defaultfloat;
 
     return (status == IloAlgorithm::Optimal);

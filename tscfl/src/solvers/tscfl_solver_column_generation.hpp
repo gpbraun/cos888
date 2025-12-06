@@ -56,17 +56,18 @@ class TSCFLSolverColumnGeneration : public TSCFLSolver
     IloNumArray a;
     IloNumArray b;
 
-    explicit TSCFLSolverColumnGeneration (const TSCFLInstance &inst_,
-                                          Subproblem::Mode smode = Subproblem::Mode::NET);
+    explicit TSCFLSolverColumnGeneration(
+        const TSCFLInstance &inst_, Subproblem::Mode smode = Subproblem::Mode::NET
+    );
 
-    ~TSCFLSolverColumnGeneration () override;
+    ~TSCFLSolverColumnGeneration() override;
 
-    bool solve (bool log_output = true, IloNum time_limit = -1.0);
+    bool solve(bool log_output = true, IloNum time_limit = -1.0);
 
   private:
-    void build_initial_model ();
+    void build_initial_model();
 
-    void add_column_for_client (int k, int i, int j);
+    void add_column_for_client(int k, int i, int j);
 
-    IloInt get_num_columns () const;
+    IloInt get_num_columns() const;
 };

@@ -12,9 +12,14 @@
 //  Construtor
 // ---------------------------------------------------------------------
 
-LRP::LRP (const TSCFLInstance &inst_)
-    : env (inst_.env), inst (inst_), cuts (inst_), a (env, inst_.nI), b (env, inst_.nJ),
-      x (env, inst_.nI, inst_.nJ), y (env, inst_.nJ, inst_.nK)
+LRP::LRP(const TSCFLInstance &inst_)
+    : env(inst_.env),
+      inst(inst_),
+      cuts(inst_),
+      a(env, inst_.nI),
+      b(env, inst_.nJ),
+      x(env, inst_.nI, inst_.nJ),
+      y(env, inst_.nJ, inst_.nK)
 {
 }
 
@@ -23,16 +28,16 @@ LRP::LRP (const TSCFLInstance &inst_)
 // ---------------------------------------------------------------------
 
 std::unique_ptr<LRP>
-LRP::create (const TSCFLInstance &inst, Mode mode)
+LRP::create(const TSCFLInstance &inst, Mode mode)
 {
     switch (mode)
         {
         case Mode::CAPACITIES:
-            return std::make_unique<LRPCapacity> (inst);
+            return std::make_unique<LRPCapacity>(inst);
         case Mode::BALANCES:
-            return std::make_unique<LRPBalance> (inst);
+            return std::make_unique<LRPBalance>(inst);
         default:
-            throw std::invalid_argument ("LRP::create: modo desconhecido.");
+            throw std::invalid_argument("LRP::create: modo desconhecido.");
         }
 }
 
@@ -59,7 +64,7 @@ LRP::create (const TSCFLInstance &inst, Mode mode)
 // violados, até max_new_cuts.
 // ---------------------------------------------------------------------
 IloInt
-LRP::separate_flow_covers (IloInt max_new_cuts)
+LRP::separate_flow_covers(IloInt max_new_cuts)
 {
     const IloInt nI = inst.nI;
     const IloInt nJ = inst.nJ;
@@ -72,7 +77,7 @@ LRP::separate_flow_covers (IloInt max_new_cuts)
     static const IloInt MAX_COVERS_PER_NODE = 3;
 
     std::vector<FlowCoverCut> candidates;
-    candidates.reserve (static_cast<std::size_t> (3 * (nI + nJ)));
+    candidates.reserve(static_cast<std::size_t>(3 * (nI + nJ)));
 
     // -------------------------------------------------------------
     // 1a) Cortes de planta (flow-cover em ∑_j x_ij ≤ p_i a_i)
@@ -81,24 +86,27 @@ LRP::separate_flow_covers (IloInt max_new_cuts)
         {
             // índices j com x_ij > 0 e q_j > 0
             std::vector<IloInt> idx;
-            idx.reserve (static_cast<std::size_t> (nJ));
+            idx.reserve(static_cast<std::size_t>(nJ));
             for (IloInt j = 0; j < nJ; ++j)
                 {
                     if (x[i][j] > EPS && inst.q[j] > EPS)
-                        idx.push_back (j);
+                        idx.push_back(j);
                 }
-            if (idx.empty ())
+            if (idx.empty())
                 continue;
 
             // ordena por capacidade q_j decrescente (poderia usar x_ij também)
-            std::sort (idx.begin (), idx.end (),
-                       [&] (IloInt j1, IloInt j2) { return inst.q[j1] > inst.q[j2]; });
+            std::sort(
+                idx.begin(),
+                idx.end(),
+                [&](IloInt j1, IloInt j2) { return inst.q[j1] > inst.q[j2]; }
+            );
 
-            const std::size_t m = idx.size ();
+            const std::size_t m = idx.size();
 
             // prefixos de q_j e x_ij para reuso
-            std::vector<IloNum> prefix_q (m, 0.0);
-            std::vector<IloNum> prefix_x (m, 0.0);
+            std::vector<IloNum> prefix_q(m, 0.0);
+            std::vector<IloNum> prefix_x(m, 0.0);
 
             for (std::size_t t = 0; t < m; ++t)
                 {
@@ -125,7 +133,7 @@ LRP::separate_flow_covers (IloInt max_new_cuts)
                     IloNum lhs = -inst.p[i] * a[i] + prefix_x[t];
 
                     // cost[j] = 1 se j ∈ T, 0 caso contrário
-                    IloNumArray cost (env, nJ);
+                    IloNumArray cost(env, nJ);
                     for (IloInt j = 0; j < nJ; ++j)
                         cost[j] = 0.0;
                     for (std::size_t u = 0; u <= t; ++u)
@@ -139,16 +147,17 @@ LRP::separate_flow_covers (IloInt max_new_cuts)
                     for (IloInt j = 0; j < nJ; ++j)
                         {
                             if (cost[j] <= EPS)
-                                rhs += IloMin (inst.q[j], overflow_cap);
+                                rhs += IloMin(inst.q[j], overflow_cap);
                         }
 
                     const IloNum viol = lhs - rhs;
                     if (viol > EPS)
                         {
-                            FlowCoverCut cut (FlowCoverCut::NodeType::PLANT, static_cast<int> (i),
-                                              cost, rhs);
+                            FlowCoverCut cut(
+                                FlowCoverCut::NodeType::PLANT, static_cast<int>(i), cost, rhs
+                            );
                             cut.overflow = viol; // violação do corte
-                            candidates.push_back (std::move (cut));
+                            candidates.push_back(std::move(cut));
                             ++covers_for_i;
                         }
                 }
@@ -161,24 +170,27 @@ LRP::separate_flow_covers (IloInt max_new_cuts)
         {
             // índices k com y_jk > 0 e r_k > 0
             std::vector<IloInt> idx;
-            idx.reserve (static_cast<std::size_t> (nK));
+            idx.reserve(static_cast<std::size_t>(nK));
             for (IloInt k = 0; k < nK; ++k)
                 {
                     if (y[j][k] > EPS && inst.r[k] > EPS)
-                        idx.push_back (k);
+                        idx.push_back(k);
                 }
-            if (idx.empty ())
+            if (idx.empty())
                 continue;
 
             // ordena por demanda r_k decrescente
-            std::sort (idx.begin (), idx.end (),
-                       [&] (IloInt k1, IloInt k2) { return inst.r[k1] > inst.r[k2]; });
+            std::sort(
+                idx.begin(),
+                idx.end(),
+                [&](IloInt k1, IloInt k2) { return inst.r[k1] > inst.r[k2]; }
+            );
 
-            const std::size_t m = idx.size ();
+            const std::size_t m = idx.size();
 
             // prefixos de r_k e y_jk para reuso
-            std::vector<IloNum> prefix_r (m, 0.0);
-            std::vector<IloNum> prefix_y (m, 0.0);
+            std::vector<IloNum> prefix_r(m, 0.0);
+            std::vector<IloNum> prefix_y(m, 0.0);
 
             for (std::size_t t = 0; t < m; ++t)
                 {
@@ -205,7 +217,7 @@ LRP::separate_flow_covers (IloInt max_new_cuts)
                     IloNum lhs = -inst.q[j] * b[j] + prefix_y[t];
 
                     // cost[k] = 1 se k ∈ S, 0 caso contrário
-                    IloNumArray cost (env, nK);
+                    IloNumArray cost(env, nK);
                     for (IloInt k = 0; k < nK; ++k)
                         cost[k] = 0.0;
                     for (std::size_t u = 0; u <= t; ++u)
@@ -219,30 +231,33 @@ LRP::separate_flow_covers (IloInt max_new_cuts)
                     for (IloInt k = 0; k < nK; ++k)
                         {
                             if (cost[k] <= EPS)
-                                rhs += IloMin (inst.r[k], overflow_cap);
+                                rhs += IloMin(inst.r[k], overflow_cap);
                         }
 
                     const IloNum viol = lhs - rhs;
                     if (viol > EPS)
                         {
-                            FlowCoverCut cut (FlowCoverCut::NodeType::DEPOT, static_cast<int> (j),
-                                              cost, rhs);
+                            FlowCoverCut cut(
+                                FlowCoverCut::NodeType::DEPOT, static_cast<int>(j), cost, rhs
+                            );
                             cut.overflow = viol;
-                            candidates.push_back (std::move (cut));
+                            candidates.push_back(std::move(cut));
                             ++covers_for_j;
                         }
                 }
         }
 
-    if (candidates.empty ())
+    if (candidates.empty())
         return 0;
 
     // -------------------------------------------------------------
     // 2) Ordena por violação (overflow) decrescente
     // -------------------------------------------------------------
-    std::sort (candidates.begin (), candidates.end (),
-               [] (const FlowCoverCut &c1, const FlowCoverCut &c2)
-                   { return c1.overflow > c2.overflow; });
+    std::sort(
+        candidates.begin(),
+        candidates.end(),
+        [](const FlowCoverCut &c1, const FlowCoverCut &c2) { return c1.overflow > c2.overflow; }
+    );
 
     // -------------------------------------------------------------
     // 3) Insere até max_new_cuts cortes realmente novos
@@ -252,7 +267,7 @@ LRP::separate_flow_covers (IloInt max_new_cuts)
         {
             if (new_cuts >= max_new_cuts)
                 break;
-            if (cuts.add_flow_cover (cand))
+            if (cuts.add_flow_cover(cand))
                 ++new_cuts;
         }
 
@@ -285,7 +300,7 @@ LRP::separate_flow_covers (IloInt max_new_cuts)
 // apenas os mais violados, até um limite max_new_cuts.
 // ---------------------------------------------------------------------
 IloInt
-LRP::separate_subset_rows (IloInt max_new_cuts)
+LRP::separate_subset_rows(IloInt max_new_cuts)
 {
     const IloInt nI = inst.nI;
     const IloInt nJ = inst.nJ;
@@ -300,12 +315,15 @@ LRP::separate_subset_rows (IloInt max_new_cuts)
     // -----------------------------------------------------------------
     // 1) Ordena clientes por demanda r_k decrescente
     // -----------------------------------------------------------------
-    std::vector<IloInt> order_k (static_cast<std::size_t> (nK));
+    std::vector<IloInt> order_k(static_cast<std::size_t>(nK));
     for (IloInt k = 0; k < nK; ++k)
-        order_k[static_cast<std::size_t> (k)] = k;
+        order_k[static_cast<std::size_t>(k)] = k;
 
-    std::sort (order_k.begin (), order_k.end (),
-               [&] (IloInt k1, IloInt k2) { return inst.r[k1] > inst.r[k2]; });
+    std::sort(
+        order_k.begin(),
+        order_k.end(),
+        [&](IloInt k1, IloInt k2) { return inst.r[k1] > inst.r[k2]; }
+    );
 
     // Vamos considerar apenas alguns prefixos {k_1,...,k_t} para limitar o custo.
     // Por exemplo, no máximo PREFIX_LIMIT prefixos.
@@ -313,7 +331,7 @@ LRP::separate_subset_rows (IloInt max_new_cuts)
 
     // Vetor de candidatos
     std::vector<SubsetRowCut> candidates;
-    candidates.reserve (2 * static_cast<std::size_t> (IloMin (nK, PREFIX_LIMIT)));
+    candidates.reserve(2 * static_cast<std::size_t>(IloMin(nK, PREFIX_LIMIT)));
 
     // -----------------------------------------------------------------
     // 2) Gera candidatos para vários subconjuntos S (prefixos)
@@ -321,7 +339,7 @@ LRP::separate_subset_rows (IloInt max_new_cuts)
     IloNum R_S = 0.0;
     for (IloInt t = 0; t < nK && t < PREFIX_LIMIT; ++t)
         {
-            const IloInt k_new = order_k[static_cast<std::size_t> (t)];
+            const IloInt k_new = order_k[static_cast<std::size_t>(t)];
             R_S += inst.r[k_new];
             if (R_S <= EPS)
                 continue;
@@ -330,13 +348,13 @@ LRP::separate_subset_rows (IloInt max_new_cuts)
             // 2a) Corte em DEPÓSITOS (b_j)
             // -----------------------------
             {
-                IloNumArray coeff_dep (env, nJ);
+                IloNumArray coeff_dep(env, nJ);
                 IloNum lhs_dep = 0.0;
                 const IloNum rhs_dep = -1.0;
 
                 for (IloInt j = 0; j < nJ; ++j)
                     {
-                        const IloNum alpha_j = IloMin (inst.q[j], R_S) / R_S;
+                        const IloNum alpha_j = IloMin(inst.q[j], R_S) / R_S;
                         coeff_dep[j] = alpha_j;
                         if (alpha_j > EPS)
                             lhs_dep += -alpha_j * b[j]; // lhs = -∑ α_j b_j
@@ -345,9 +363,9 @@ LRP::separate_subset_rows (IloInt max_new_cuts)
                 const IloNum overflow_dep = lhs_dep - rhs_dep; // = 1 - ∑ α_j b_j
                 if (overflow_dep > EPS)
                     {
-                        SubsetRowCut cut (SubsetRowCut::Family::DEPOT, coeff_dep, rhs_dep);
+                        SubsetRowCut cut(SubsetRowCut::Family::DEPOT, coeff_dep, rhs_dep);
                         cut.overflow = overflow_dep;
-                        candidates.push_back (std::move (cut));
+                        candidates.push_back(std::move(cut));
                     }
             }
 
@@ -355,13 +373,13 @@ LRP::separate_subset_rows (IloInt max_new_cuts)
             // 2b) Corte em PLANTAS (a_i)
             // -----------------------------
             {
-                IloNumArray coeff_plant (env, nI);
+                IloNumArray coeff_plant(env, nI);
                 IloNum lhs_plant = 0.0;
                 const IloNum rhs_plant = -1.0;
 
                 for (IloInt i = 0; i < nI; ++i)
                     {
-                        const IloNum beta_i = IloMin (inst.p[i], R_S) / R_S;
+                        const IloNum beta_i = IloMin(inst.p[i], R_S) / R_S;
                         coeff_plant[i] = beta_i;
                         if (beta_i > EPS)
                             lhs_plant += -beta_i * a[i]; // lhs = -∑ β_i a_i
@@ -370,22 +388,24 @@ LRP::separate_subset_rows (IloInt max_new_cuts)
                 const IloNum overflow_plant = lhs_plant - rhs_plant; // = 1 - ∑ β_i a_i
                 if (overflow_plant > EPS)
                     {
-                        SubsetRowCut cut (SubsetRowCut::Family::PLANT, coeff_plant, rhs_plant);
+                        SubsetRowCut cut(SubsetRowCut::Family::PLANT, coeff_plant, rhs_plant);
                         cut.overflow = overflow_plant;
-                        candidates.push_back (std::move (cut));
+                        candidates.push_back(std::move(cut));
                     }
             }
         }
 
-    if (candidates.empty ())
+    if (candidates.empty())
         return 0;
 
     // -----------------------------------------------------------------
     // 3) Ordena candidatos por violação decrescente
     // -----------------------------------------------------------------
-    std::sort (candidates.begin (), candidates.end (),
-               [] (const SubsetRowCut &c1, const SubsetRowCut &c2)
-                   { return c1.overflow > c2.overflow; });
+    std::sort(
+        candidates.begin(),
+        candidates.end(),
+        [](const SubsetRowCut &c1, const SubsetRowCut &c2) { return c1.overflow > c2.overflow; }
+    );
 
     // -----------------------------------------------------------------
     // 4) Tenta inserir até max_new_cuts cortes realmente novos
@@ -395,7 +415,7 @@ LRP::separate_subset_rows (IloInt max_new_cuts)
         {
             if (new_cuts >= max_new_cuts)
                 break;
-            if (cuts.add_subset_row (cand))
+            if (cuts.add_subset_row(cand))
                 ++new_cuts;
         }
 

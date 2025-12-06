@@ -26,33 +26,37 @@ class TSCFLSolver
     IloInt64 nodes{ 0 };
     IloAlgorithm::Status status{ IloAlgorithm::Unknown };
 
-    explicit TSCFLSolver (const TSCFLInstance &inst_) : env (inst_.env), inst (inst_) {}
+    explicit TSCFLSolver(const TSCFLInstance &inst_)
+        : env(inst_.env),
+          inst(inst_)
+    {
+    }
 
-    virtual ~TSCFLSolver () = default;
+    virtual ~TSCFLSolver() = default;
 
     // Interface comum
-    virtual bool solve (bool log_output = true, double time_limit = -1.0) = 0;
+    virtual bool solve(bool log_output = true, double time_limit = -1.0) = 0;
 
   protected:
     void
-    print_summary (const char *tag) const
+    print_summary(const char *tag) const
     {
         std::cout << "\n\n"
                   << "[" << tag << "] Solver finalizado.\n\n"
                   << "status = " << status
                   << "\n"
                   // nodes
-                  << std::fixed << std::setprecision (0) << "nodes  = " << nodes
+                  << std::fixed << std::setprecision(0) << "nodes  = " << nodes
                   << "\n"
                   // tempo
-                  << std::fixed << std::setprecision (1) << "time   = " << time
+                  << std::fixed << std::setprecision(1) << "time   = " << time
                   << " s\n"
                   // LB, UB
-                  << std::fixed << std::setprecision (0) << "LB     = " << lb << "\n"
+                  << std::fixed << std::setprecision(0) << "LB     = " << lb << "\n"
                   << "UB     = " << ub
                   << "\n"
                   // gap
-                  << std::scientific << std::setprecision (2) << "gap    = " << gap << "\n"
+                  << std::scientific << std::setprecision(2) << "gap    = " << gap << "\n"
                   << std::defaultfloat;
     }
 };

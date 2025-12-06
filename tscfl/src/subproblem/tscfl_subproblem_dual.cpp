@@ -7,7 +7,7 @@
 //  Construtor / destrutor
 // ---------------------------------------------------------------------
 
-SubproblemDual::SubproblemDual(const TSCFLInstance& inst_)
+SubproblemDual::SubproblemDual(const TSCFLInstance &inst_)
     : Subproblem(inst_),
       env(),
       model(env),
@@ -16,7 +16,8 @@ SubproblemDual::SubproblemDual(const TSCFLInstance& inst_)
       var_l2(env, inst_.nJ, 0.0, IloInfinity, ILOFLOAT),
       var_m1(env, inst_.nJ, -IloInfinity, IloInfinity, ILOFLOAT),
       var_m2(env, inst_.nK, -IloInfinity, IloInfinity, ILOFLOAT),
-      obj(IloMaximize(env, 0.0)) {
+      obj(IloMaximize(env, 0.0))
+{
     build_base_model();
     cplex.extract(model);
 
@@ -30,7 +31,8 @@ SubproblemDual::SubproblemDual(const TSCFLInstance& inst_)
     cplex.setWarning(env.getNullStream());
 }
 
-SubproblemDual::~SubproblemDual() {
+SubproblemDual::~SubproblemDual()
+{
     cplex.end();
     model.end();
     env.end();
@@ -40,12 +42,15 @@ SubproblemDual::~SubproblemDual() {
 //  Modelo base do subproblema dual
 // ---------------------------------------------------------------------
 
-void SubproblemDual::build_base_model() {
+void
+SubproblemDual::build_base_model()
+{
     // RESTRIÇÕES DO SUBPROBLEMA DUAL
 
     // arcos planta -> depósito
     for (int i = 0; i < inst.nI; ++i)
-        for (int j = 0; j < inst.nJ; ++j) model.add(var_l1[i] + var_m1[j] <= inst.c[i][j]);
+        for (int j = 0; j < inst.nJ; ++j)
+            model.add(var_l1[i] + var_m1[j] <= inst.c[i][j]);
 
     // arcos depósito -> cliente
     for (int j = 0; j < inst.nJ; ++j)
@@ -60,14 +65,19 @@ void SubproblemDual::build_base_model() {
 //  Atualiza função objetivo em função de (a,b)
 // ---------------------------------------------------------------------
 
-void SubproblemDual::set_objective(const IloNumArray& a_vals, const IloNumArray& b_vals) {
+void
+SubproblemDual::set_objective(const IloNumArray &a_vals, const IloNumArray &b_vals)
+{
     IloExpr obj_expr(env);
 
-    for (int i = 0; i < inst.nI; ++i) obj_expr += (inst.p[i] * a_vals[i]) * var_l1[i];
+    for (int i = 0; i < inst.nI; ++i)
+        obj_expr += (inst.p[i] * a_vals[i]) * var_l1[i];
 
-    for (int j = 0; j < inst.nJ; ++j) obj_expr += (inst.q[j] * b_vals[j]) * var_l2[j];
+    for (int j = 0; j < inst.nJ; ++j)
+        obj_expr += (inst.q[j] * b_vals[j]) * var_l2[j];
 
-    for (int k = 0; k < inst.nK; ++k) obj_expr += inst.r[k] * var_m2[k];
+    for (int k = 0; k < inst.nK; ++k)
+        obj_expr += inst.r[k] * var_m2[k];
 
     obj.setExpr(obj_expr);
     obj_expr.end();
@@ -77,21 +87,27 @@ void SubproblemDual::set_objective(const IloNumArray& a_vals, const IloNumArray&
 //  Resolve o subproblema para (a_vals, b_vals)
 // ---------------------------------------------------------------------
 
-void SubproblemDual::solve(const IloNumArray& a_vals, const IloNumArray& b_vals) {
+void
+SubproblemDual::solve(const IloNumArray &a_vals, const IloNumArray &b_vals)
+{
     // 1) Atualiza a função objetivo
     set_objective(a_vals, b_vals);
 
     // 2) Resolve o LP dual
-    if (!cplex.solve()) throw std::runtime_error("SubproblemDual: falha no CPLEX.");
+    if (!cplex.solve())
+        throw std::runtime_error("SubproblemDual: falha no CPLEX.");
 
     // 3) Valor ótimo do dual
     theta = cplex.getObjValue();
 
     // 4) Coeficientes do corte de Benders
-    for (int i = 0; i < inst.nI; ++i) coef_a[i] = inst.p[i] * cplex.getValue(var_l1[i]);
+    for (int i = 0; i < inst.nI; ++i)
+        coef_a[i] = inst.p[i] * cplex.getValue(var_l1[i]);
 
-    for (int j = 0; j < inst.nJ; ++j) coef_b[j] = inst.q[j] * cplex.getValue(var_l2[j]);
+    for (int j = 0; j < inst.nJ; ++j)
+        coef_b[j] = inst.q[j] * cplex.getValue(var_l2[j]);
 
     rhs = 0.0;
-    for (int k = 0; k < inst.nK; ++k) rhs += inst.r[k] * cplex.getValue(var_m2[k]);
+    for (int k = 0; k < inst.nK; ++k)
+        rhs += inst.r[k] * cplex.getValue(var_m2[k]);
 }

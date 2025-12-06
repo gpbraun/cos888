@@ -1,13 +1,8 @@
 {
-  "editor.rulers": [100],
+  "editor.rulers": [
+    100
+  ],
   "editor.formatOnSave": true,
-  "code-runner.runInTerminal": true,
-  "code-runner.ignoreSelection": true,
-  "python.analysis.typeCheckingMode": "off",
-  "[python]": {
-    "editor.tabSize": 4,
-    "editor.defaultFormatter": "ms-python.black-formatter"
-  },
   "editor.codeActionsOnSave": {
     "source.organizeImports": "explicit"
   },
@@ -15,6 +10,13 @@
     "**/*.egg-info": true,
     "**/__pycache__": true
   },
+  "python.analysis.typeCheckingMode": "off",
+  "[python]": {
+    "editor.tabSize": 4,
+    "editor.defaultFormatter": "ms-python.black-formatter"
+  },
+  "code-runner.runInTerminal": true,
+  "code-runner.ignoreSelection": true,
   "code-runner.executorMap": {
     "cpp": "cd $dir && g++ $fileName -lcp -lilocplex -lcplex -lconcert -lpthread -ldl -lm -o $fileNameWithoutExt && $dir$fileNameWithoutExt"
   },

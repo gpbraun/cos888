@@ -10,46 +10,52 @@ ILOSTLBEGIN
 //  Cut – implementação
 // =====================================================================
 
-Cut::Cut (IloNum rhs_, std::size_t hash_) : rhs (rhs_), hash (hash_) {}
+Cut::Cut(IloNum rhs_, std::size_t hash_)
+    : rhs(rhs_),
+      hash(hash_)
+{
+}
 
 // =====================================================================
 //  FlowCoverCut – implementação
 // =====================================================================
 
-FlowCoverCut::FlowCoverCut (NodeType node_type, int index, const IloNumArray &cost, IloNum rhs)
-    : Cut (rhs, compute_hash (node_type, index, cost)), node_type_ (node_type), index_ (index),
-      cost_ (cost)
+FlowCoverCut::FlowCoverCut(NodeType node_type, int index, const IloNumArray &cost, IloNum rhs)
+    : Cut(rhs, compute_hash(node_type, index, cost)),
+      node_type_(node_type),
+      index_(index),
+      cost_(cost)
 {
-    const IloInt n = cost_.getSize ();
-    support_.reserve (static_cast<std::size_t> (n));
+    const IloInt n = cost_.getSize();
+    support_.reserve(static_cast<std::size_t>(n));
     for (IloInt t = 0; t < n; ++t)
         {
-            if (std::fabs (cost_[t]) > EPS)
+            if (std::fabs(cost_[t]) > EPS)
                 {
-                    support_.push_back (t);
+                    support_.push_back(t);
                 }
         }
 }
 
 std::size_t
-FlowCoverCut::compute_hash (NodeType node_type, int idx, const IloNumArray &cost)
+FlowCoverCut::compute_hash(NodeType node_type, int idx, const IloNumArray &cost)
 {
     std::string key;
-    key.reserve (32 + 4 * static_cast<std::size_t> (cost.getSize ()));
+    key.reserve(32 + 4 * static_cast<std::size_t>(cost.getSize()));
 
     // 'F' = FlowCover, 'P'/'D' = Plant/Depot
-    key.push_back ('F');
-    key.push_back (node_type == NodeType::PLANT ? 'P' : 'D');
-    key.push_back (':');
-    key += std::to_string (idx);
-    key.push_back ('|');
+    key.push_back('F');
+    key.push_back(node_type == NodeType::PLANT ? 'P' : 'D');
+    key.push_back(':');
+    key += std::to_string(idx);
+    key.push_back('|');
 
-    for (IloInt j = 0; j < cost.getSize (); ++j)
+    for (IloInt j = 0; j < cost.getSize(); ++j)
         {
-            if (std::fabs (cost[j]) > EPS)
+            if (std::fabs(cost[j]) > EPS)
                 {
-                    key += std::to_string (j);
-                    key.push_back ('#');
+                    key += std::to_string(j);
+                    key.push_back('#');
                 }
         }
 
@@ -57,9 +63,13 @@ FlowCoverCut::compute_hash (NodeType node_type, int idx, const IloNumArray &cost
 }
 
 IloNum
-FlowCoverCut::compute_lhs (const TSCFLInstance &inst, const IloNumMatrix &x_lr,
-                           const IloNumMatrix &y_lr, const IloNumArray &a_lr,
-                           const IloNumArray &b_lr) const
+FlowCoverCut::compute_lhs(
+    const TSCFLInstance &inst,
+    const IloNumMatrix &x_lr,
+    const IloNumMatrix &y_lr,
+    const IloNumArray &a_lr,
+    const IloNumArray &b_lr
+) const
 {
     IloNum lhs = 0.0;
 
@@ -86,8 +96,13 @@ FlowCoverCut::compute_lhs (const TSCFLInstance &inst, const IloNumMatrix &x_lr,
 }
 
 void
-FlowCoverCut::add_to_costs (const TSCFLInstance &inst, IloNumArray &cost_a, IloNumArray &cost_b,
-                            IloNumMatrix &cost_x, IloNumMatrix &cost_y) const
+FlowCoverCut::add_to_costs(
+    const TSCFLInstance &inst,
+    IloNumArray &cost_a,
+    IloNumArray &cost_b,
+    IloNumMatrix &cost_x,
+    IloNumMatrix &cost_y
+) const
 {
     if (u <= EPS)
         return;
@@ -116,42 +131,44 @@ FlowCoverCut::add_to_costs (const TSCFLInstance &inst, IloNumArray &cost_a, IloN
 //  SubsetRowCut – implementação
 // =====================================================================
 
-SubsetRowCut::SubsetRowCut (Family family, const IloNumArray &coeff, IloNum rhs)
-    : Cut (rhs, compute_hash (family, coeff)), family_ (family), coeff_ (coeff)
+SubsetRowCut::SubsetRowCut(Family family, const IloNumArray &coeff, IloNum rhs)
+    : Cut(rhs, compute_hash(family, coeff)),
+      family_(family),
+      coeff_(coeff)
 {
-    const IloInt n = coeff_.getSize ();
-    support_.reserve (static_cast<std::size_t> (n));
+    const IloInt n = coeff_.getSize();
+    support_.reserve(static_cast<std::size_t>(n));
     for (IloInt t = 0; t < n; ++t)
         {
-            if (std::fabs (coeff_[t]) > EPS)
+            if (std::fabs(coeff_[t]) > EPS)
                 {
-                    support_.push_back (t);
+                    support_.push_back(t);
                 }
         }
 }
 
 std::size_t
-SubsetRowCut::compute_hash (Family family, const IloNumArray &coeff)
+SubsetRowCut::compute_hash(Family family, const IloNumArray &coeff)
 {
     std::string key;
-    key.reserve (32 + 8 * static_cast<std::size_t> (coeff.getSize ()));
+    key.reserve(32 + 8 * static_cast<std::size_t>(coeff.getSize()));
 
     // 'S' = SubsetRow, 'P'/'D' = Plant/Depot
-    key.push_back ('S');
-    key.push_back (family == Family::PLANT ? 'P' : 'D');
-    key.push_back ('|');
+    key.push_back('S');
+    key.push_back(family == Family::PLANT ? 'P' : 'D');
+    key.push_back('|');
 
-    for (IloInt j = 0; j < coeff.getSize (); ++j)
+    for (IloInt j = 0; j < coeff.getSize(); ++j)
         {
-            if (std::fabs (coeff[j]) > EPS)
+            if (std::fabs(coeff[j]) > EPS)
                 {
-                    key += std::to_string (j);
-                    key.push_back ('=');
+                    key += std::to_string(j);
+                    key.push_back('=');
 
                     // quantização para evitar ruído numérico
-                    const double scaled = std::round (coeff[j] * 1e6); // 6 casas
-                    key += std::to_string (static_cast<long long> (scaled));
-                    key.push_back ('#');
+                    const double scaled = std::round(coeff[j] * 1e6); // 6 casas
+                    key += std::to_string(static_cast<long long>(scaled));
+                    key.push_back('#');
                 }
         }
 
@@ -159,8 +176,13 @@ SubsetRowCut::compute_hash (Family family, const IloNumArray &coeff)
 }
 
 IloNum
-SubsetRowCut::compute_lhs (const TSCFLInstance &, const IloNumMatrix &, const IloNumMatrix &,
-                           const IloNumArray &a_lr, const IloNumArray &b_lr) const
+SubsetRowCut::compute_lhs(
+    const TSCFLInstance &,
+    const IloNumMatrix &,
+    const IloNumMatrix &,
+    const IloNumArray &a_lr,
+    const IloNumArray &b_lr
+) const
 {
     IloNum lhs = 0.0;
 
@@ -183,8 +205,9 @@ SubsetRowCut::compute_lhs (const TSCFLInstance &, const IloNumMatrix &, const Il
 }
 
 void
-SubsetRowCut::add_to_costs (const TSCFLInstance &, IloNumArray &cost_a, IloNumArray &cost_b,
-                            IloNumMatrix &, IloNumMatrix &) const
+SubsetRowCut::add_to_costs(
+    const TSCFLInstance &, IloNumArray &cost_a, IloNumArray &cost_b, IloNumMatrix &, IloNumMatrix &
+) const
 {
     if (u <= EPS)
         return;
@@ -209,62 +232,67 @@ SubsetRowCut::add_to_costs (const TSCFLInstance &, IloNumArray &cost_a, IloNumAr
 //  CutManager – implementação
 // =====================================================================
 
-CutManager::CutManager (const TSCFLInstance &inst_)
-    : env (inst_.env), inst (inst_), cost_a (env, inst_.nI), cost_b (env, inst_.nJ),
-      cost_x (env, inst_.nI, inst_.nJ), cost_y (env, inst_.nJ, inst_.nK)
+CutManager::CutManager(const TSCFLInstance &inst_)
+    : env(inst_.env),
+      inst(inst_),
+      cost_a(env, inst_.nI),
+      cost_b(env, inst_.nJ),
+      cost_x(env, inst_.nI, inst_.nJ),
+      cost_y(env, inst_.nJ, inst_.nK)
 {
 }
 
 void
-CutManager::clear ()
+CutManager::clear()
 {
-    cuts.clear ();
-    hashes.clear ();
+    cuts.clear();
+    hashes.clear();
 }
 
 bool
-CutManager::add (std::unique_ptr<Cut> cut)
+CutManager::add(std::unique_ptr<Cut> cut)
 {
-    auto res = hashes.insert (cut->hash);
+    auto res = hashes.insert(cut->hash);
     if (!res.second)
         return false; // corte duplicado
-    cuts.push_back (std::move (cut));
+    cuts.push_back(std::move(cut));
     return true;
 }
 
 // Conveniências para FlowCover
 bool
-CutManager::add_flow_cover (const FlowCoverCut &cut)
+CutManager::add_flow_cover(const FlowCoverCut &cut)
 {
-    auto ptr = std::make_unique<FlowCoverCut> (cut);
-    return add (std::move (ptr));
+    auto ptr = std::make_unique<FlowCoverCut>(cut);
+    return add(std::move(ptr));
 }
 
 bool
-CutManager::add_flow_cover (FlowCoverCut::NodeType node_type, int index, const IloNumArray &cost,
-                            IloNum rhs)
+CutManager::add_flow_cover(
+    FlowCoverCut::NodeType node_type, int index, const IloNumArray &cost, IloNum rhs
+)
 {
-    auto ptr = std::make_unique<FlowCoverCut> (node_type, index, cost, rhs);
-    return add (std::move (ptr));
+    auto ptr = std::make_unique<FlowCoverCut>(node_type, index, cost, rhs);
+    return add(std::move(ptr));
 }
 
 // Conveniências para SubsetRow
 bool
-CutManager::add_subset_row (const SubsetRowCut &cut)
+CutManager::add_subset_row(const SubsetRowCut &cut)
 {
-    auto ptr = std::make_unique<SubsetRowCut> (cut);
-    return add (std::move (ptr));
+    auto ptr = std::make_unique<SubsetRowCut>(cut);
+    return add(std::move(ptr));
 }
 
 bool
-CutManager::add_subset_row (SubsetRowCut::Family family, const IloNumArray &coeff, IloNum rhs)
+CutManager::add_subset_row(SubsetRowCut::Family family, const IloNumArray &coeff, IloNum rhs)
 {
-    auto ptr = std::make_unique<SubsetRowCut> (family, coeff, rhs);
-    return add (std::move (ptr));
+    auto ptr = std::make_unique<SubsetRowCut>(family, coeff, rhs);
+    return add(std::move(ptr));
 }
 
 int
-CutManager::count (Cut::Status s) const
+CutManager::count(Cut::Status s) const
 {
     int cnt = 0;
     for (const auto &c : cuts)
@@ -274,7 +302,7 @@ CutManager::count (Cut::Status s) const
 }
 
 IloNum
-CutManager::norm2sq () const
+CutManager::norm2sq() const
 {
     IloNum s = 0.0;
     for (const auto &c : cuts)
@@ -286,7 +314,7 @@ CutManager::norm2sq () const
 }
 
 void
-CutManager::update_multipliers (IloNum step)
+CutManager::update_multipliers(IloNum step)
 {
     if (step <= 0.0)
         return;
@@ -295,35 +323,40 @@ CutManager::update_multipliers (IloNum step)
         {
             if (c->status != Cut::Status::CI)
                 {
-                    c->u = IloMax (0.0, c->u + step * c->overflow);
+                    c->u = IloMax(0.0, c->u + step * c->overflow);
                 }
         }
 }
 
 void
-CutManager::update_costs ()
+CutManager::update_costs()
 {
-    fill_zero (cost_x);
-    fill_zero (cost_y);
-    fill_zero (cost_a);
-    fill_zero (cost_b);
+    fill_zero(cost_x);
+    fill_zero(cost_y);
+    fill_zero(cost_a);
+    fill_zero(cost_b);
 
     for (const auto &c : cuts)
         {
             if (c->status == Cut::Status::CI || c->u <= EPS)
                 continue;
-            c->add_to_costs (inst, cost_a, cost_b, cost_x, cost_y);
+            c->add_to_costs(inst, cost_a, cost_b, cost_x, cost_y);
         }
 }
 
 void
-CutManager::update_status (const IloNumMatrix &x_lr, const IloNumMatrix &y_lr,
-                           const IloNumArray &a_lr, const IloNumArray &b_lr, int extra_age)
+CutManager::update_status(
+    const IloNumMatrix &x_lr,
+    const IloNumMatrix &y_lr,
+    const IloNumArray &a_lr,
+    const IloNumArray &b_lr,
+    int extra_age
+)
 {
     for (auto &c_ptr : cuts)
         {
             Cut &c = *c_ptr;
-            IloNum lhs = c.compute_lhs (inst, x_lr, y_lr, a_lr, b_lr);
+            IloNum lhs = c.compute_lhs(inst, x_lr, y_lr, a_lr, b_lr);
             c.overflow = lhs - c.rhs;
 
             if (c.overflow > EPS)
