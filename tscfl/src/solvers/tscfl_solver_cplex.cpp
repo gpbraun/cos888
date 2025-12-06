@@ -41,10 +41,6 @@ TSCFLSolverCplex::~TSCFLSolverCplex()
     model.end();
 }
 
-// ---------------------------------------------------------------------
-//  Modelo
-// ---------------------------------------------------------------------
-
 void
 TSCFLSolverCplex::build_model()
 {
@@ -83,10 +79,6 @@ TSCFLSolverCplex::build_model()
     model.add(obj);
     obj_expr.end();
 }
-
-// ---------------------------------------------------------------------
-//  Solve
-// ---------------------------------------------------------------------
 
 bool
 TSCFLSolverCplex::solve(bool log_output, double time_limit)

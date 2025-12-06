@@ -11,10 +11,6 @@ Gabriel Braun, 2025
 #include <iomanip>
 #include <iostream>
 
-// =====================================================================
-//  Construtor
-// =====================================================================
-
 TSCFLSolver::TSCFLSolver(const TSCFLInstance &inst_)
     : env(inst_.env),
       inst(inst_),
@@ -28,9 +24,6 @@ TSCFLSolver::TSCFLSolver(const TSCFLInstance &inst_)
 {
 }
 
-// =====================================================================
-//  Utilitários protegidos
-// =====================================================================
 void
 TSCFLSolver::update_gap()
 {
@@ -59,18 +52,20 @@ TSCFLSolver::print_summary(const char *tag) const
               << "[" << tag << "] Solver finalizado.\n\n"
               << "status = " << status
               << "\n"
-              // nodes
+              // número de nodos explorados
               << std::fixed << std::setprecision(0) << "nodes  = " << nodes
               << "\n"
-              // nodes
+              // iterações
               << std::fixed << std::setprecision(0) << "iters  = " << iter
               << "\n"
               // tempo
-              << std::fixed << std::setprecision(1) << "time   = " << time
-              << " s\n"
-              // LB, UB
-              << std::fixed << std::setprecision(0) << "LB     = " << lb << "\n"
-              << "UB     = " << ub
+              << std::fixed << std::setprecision(1) << "time   = " << time << " s"
+              << "\n"
+              // LowerBound
+              << std::fixed << std::setprecision(0) << "LB     = " << lb
+              << "\n"
+              // UpperBound
+              << std::fixed << std::setprecision(0) << "UB     = " << ub
               << "\n"
               // gap
               << std::scientific << std::setprecision(2) << "gap    = " << gap << "\n"

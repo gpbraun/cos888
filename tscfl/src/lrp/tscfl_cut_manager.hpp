@@ -15,10 +15,7 @@ Gabriel Braun, 2025
 #include "tscfl_instance.hpp"
 #include "tscfl_utils.hpp"
 
-// =====================================================================
-//  Cut: base genérica
-// =====================================================================
-
+// CORTE: Base
 class Cut
 {
   public:
@@ -60,10 +57,7 @@ class Cut
         = 0;
 };
 
-// =====================================================================
-//  FlowCoverCut: corte de flow-cover (planta/deposito)
-// =====================================================================
-
+// CORTE: FlowCover
 class FlowCoverCut : public Cut
 {
   public:
@@ -117,10 +111,7 @@ class FlowCoverCut : public Cut
     ) const override;
 };
 
-// =====================================================================
-//  SubsetRowCut: cortes de demanda agregada (subset-row)
-// =====================================================================
-
+// CORTE: SubsetRow
 class SubsetRowCut : public Cut
 {
   public:
@@ -168,17 +159,14 @@ class SubsetRowCut : public Cut
     ) const override;
 };
 
-// =====================================================================
-//  CutManager: gerenciador genérico de cortes
-// =====================================================================
-
+// GERENCIADOR DE CORTES
 class CutManager
 {
   public:
     IloEnv &env;
     const TSCFLInstance &inst;
 
-    // custos agregados pelos cortes (recalculados a cada iteração)
+    // custos agregados pelos cortes
     IloNumArray cost_a;
     IloNumArray cost_b;
     IloNumMatrix cost_x;
@@ -204,33 +192,33 @@ class CutManager
         return cuts;
     }
 
-    // Insere corte se ainda não existir (baseado no hash).
+    // Adiciona: corte se ainda não existir (baseado no hash).
     // Retorna: true se o corte foi de fato adicionado.
     bool add(std::unique_ptr<Cut> cut);
 
-    // Conveniências para FlowCover
+    // Adiciona: FlowCover
     bool add_flow_cover(const FlowCoverCut &cut);
     bool add_flow_cover(
         FlowCoverCut::NodeType node_type, int index, const IloNumArray &cost, IloNum rhs
     );
 
-    // Conveniências para SubsetRow
+    // Adiciona: SubsetRow
     bool add_subset_row(const SubsetRowCut &cut);
     bool add_subset_row(SubsetRowCut::Family family, const IloNumArray &coeff, IloNum rhs);
 
     // Retorna: número de cortes em cada status
     int count(Cut::Status s) const;
 
-    // Contribuição dos cortes para ||g||^2
+    // Retorna: contribuição dos cortes para ||g||^2
     IloNum norm2sq() const;
 
-    // Atualiza multiplicadores dos cortes (subgradiente)
+    // Atualiza: multiplicadores dos cortes (subgradiente)
     void update_multipliers(IloNum step);
 
-    // Recalcula custos agregados cost_a, cost_b, cost_x, cost_y
+    // Atualiza: cost_a, cost_b, cost_x, cost_y
     void update_costs();
 
-    // Atualiza violação e status CA/PA/CI, com aging
+    // Atualiza: violação e status (CA/PA/CI)
     void update_status(
         const IloNumMatrix &x_lr,
         const IloNumMatrix &y_lr,

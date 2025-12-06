@@ -18,20 +18,12 @@ Gabriel Braun, 2025
 #include "tscfl_subproblem_net.hpp"
 #include "tscfl_subproblem_primal.hpp"
 
-// ---------------------------------------------------------------------
-//  Construtor
-// ---------------------------------------------------------------------
-
 Subproblem::Subproblem(const TSCFLInstance &inst_)
     : inst(inst_),
       coef_a(inst_.env, inst_.nI),
       coef_b(inst_.env, inst_.nJ)
 {
 }
-
-// ---------------------------------------------------------------------
-//  Factory
-// ---------------------------------------------------------------------
 
 std::unique_ptr<Subproblem>
 Subproblem::create(const TSCFLInstance &inst, Mode mode)
@@ -49,10 +41,6 @@ Subproblem::create(const TSCFLInstance &inst, Mode mode)
         }
 }
 
-// ---------------------------------------------------------------------
-//  Heurística primal 1: recebe (a_frac, b_frac)
-// ---------------------------------------------------------------------
-
 IloNum
 Subproblem::solve_primal_heuristic(
     const IloNumArray &a_frac, const IloNumArray &b_frac, IloNumArray &a_int, IloNumArray &b_int
@@ -62,7 +50,7 @@ Subproblem::solve_primal_heuristic(
     fill_zero(a_int);
     fill_zero(b_int);
 
-    // 1) Seleção de plantas abertas
+    // Seleção de plantas abertas
     std::vector<int> ordI(inst.nI);
     std::iota(ordI.begin(), ordI.end(), 0);
 
@@ -90,7 +78,7 @@ Subproblem::solve_primal_heuristic(
             capI += inst.p[i];
         }
 
-    // 2) Seleção de depósitos abertos
+    // Seleção de depósitos abertos
     std::vector<int> ordJ(inst.nJ);
     std::iota(ordJ.begin(), ordJ.end(), 0);
 
@@ -118,15 +106,11 @@ Subproblem::solve_primal_heuristic(
             capJ += inst.q[j];
         }
 
-    // 3) Resolve o subproblema de fluxo mínimo para (a_int, b_int)
+    // Resolve o subproblema de fluxo mínimo para (a_int, b_int)
     this->solve(a_int, b_int);
 
-    return IloScalProd(inst.f, a_int) + IloScalProd(inst.g, b_int) + theta;
+    return opt;
 }
-
-// ---------------------------------------------------------------------
-//  Heurística primal 2: lê (a,b) do CPLEX
-// ---------------------------------------------------------------------
 
 IloNum
 Subproblem::solve_primal_heuristic(

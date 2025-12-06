@@ -41,5 +41,5 @@ class SubproblemPrimal : public Subproblem
     void build_base_model();
 
     // Atualiza o lado direito das restrições que dependem de (a,b)
-    void set_constraints(const IloNumArray &a, const IloNumArray &b);
+    void update_model(const IloNumArray &a, const IloNumArray &b);
 };

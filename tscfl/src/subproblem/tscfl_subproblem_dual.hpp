@@ -40,5 +40,5 @@ class SubproblemDual : public Subproblem
     void build_base_model();
 
     // Atualiza: função objetivo do subproblema em função de (a,b)
-    void set_objective(const IloNumArray &a_vals, const IloNumArray &b_vals);
+    void update_model(const IloNumArray &a_vals, const IloNumArray &b_vals);
 };

@@ -12,10 +12,7 @@ Gabriel Braun, 2025
 
 #include "tscfl_instance.hpp"
 
-// =====================================================================
-//  BASE: TSCFLSolver
-// =====================================================================
-
+// SOLVER TSCFL
 class TSCFLSolver
 {
   protected:
@@ -23,11 +20,11 @@ class TSCFLSolver
     const TSCFLInstance &inst;
 
   public:
-    // Resultados comuns
-    IloNum lb;   // lower bound
-    IloNum ub;   // upper bound
-    IloNum gap;  // (ub - lb)/max(1,|ub|)
-    IloNum time; // tempo total (s)
+    // Resultados
+    IloNum lb;
+    IloNum ub;
+    IloNum gap;
+    IloNum time;
     IloInt64 iter;
     IloInt64 nodes;
     IloAlgorithm::Status status;

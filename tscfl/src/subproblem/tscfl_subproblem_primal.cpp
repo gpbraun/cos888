@@ -10,10 +10,6 @@ Gabriel Braun, 2025
 
 #include <stdexcept>
 
-// ---------------------------------------------------------------------
-//  Construtor / destrutor
-// ---------------------------------------------------------------------
-
 SubproblemPrimal::SubproblemPrimal(const TSCFLInstance &inst_)
     : Subproblem(inst_),
       env(),
@@ -46,22 +42,13 @@ SubproblemPrimal::~SubproblemPrimal()
     env.end();
 }
 
-// ---------------------------------------------------------------------
-//  Modelo base do subproblema primal
-// ---------------------------------------------------------------------
-
 void
 SubproblemPrimal::build_base_model()
 {
     // Capacidade das plantas
     for (int i = 0; i < inst.nI; ++i)
         {
-            constr_l1[i] = IloRange(
-                env,
-                -IloInfinity,     // lower bound
-                IloSum(var_x[i]), // expressão
-                IloInfinity
-            ); // upper bound
+            constr_l1[i] = IloRange(env, -IloInfinity, IloSum(var_x[i]), IloInfinity);
             model.add(constr_l1[i]);
         }
 
@@ -92,12 +79,8 @@ SubproblemPrimal::build_base_model()
     model.add(obj);
 }
 
-// ---------------------------------------------------------------------
-//  Atualiza restrições dependentes de (a,b)
-// ---------------------------------------------------------------------
-
 void
-SubproblemPrimal::set_constraints(const IloNumArray &a, const IloNumArray &b)
+SubproblemPrimal::update_model(const IloNumArray &a, const IloNumArray &b)
 {
     // Capacidade das plantas
     for (int i = 0; i < inst.nI; ++i)
@@ -108,23 +91,19 @@ SubproblemPrimal::set_constraints(const IloNumArray &a, const IloNumArray &b)
         constr_l2[j].setBounds(-IloInfinity, inst.q[j] * b[j]);
 }
 
-// ---------------------------------------------------------------------
-//  Resolve o subproblema para (a, b)
-// ---------------------------------------------------------------------
-
 IloNum
 SubproblemPrimal::solve(const IloNumArray &a, const IloNumArray &b)
 {
-    // 1) Atualiza as restrições dependentes de (a,b)
-    set_constraints(a, b);
+    // Atualiza as restrições dependentes de (a,b)
+    update_model(a, b);
 
-    // 2) Resolve o LP primal
+    // Resolve o LP primal
     if (!cplex.solve())
         throw std::runtime_error("SubproblemPrimal: CPLEX failed to solve primal subproblem.");
 
     theta = cplex.getObjValue();
 
-    // 3) Lê as variáveis duais
+    // Lê as variáveis duais
     IloNumArray l1(env, inst.nI);
     IloNumArray l2(env, inst.nJ);
     IloNumArray m2(env, inst.nK);
@@ -133,7 +112,7 @@ SubproblemPrimal::solve(const IloNumArray &a, const IloNumArray &b)
     cplex.getDuals(l2, constr_l2);
     cplex.getDuals(m2, constr_m2);
 
-    // 4) Calcula os coeficientes do corte
+    // Calcula os coeficientes do corte
     for (int i = 0; i < inst.nI; ++i)
         coef_a[i] = inst.p[i] * l1[i];
 

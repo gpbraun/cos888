@@ -28,11 +28,10 @@ class TSCFLSolverSubgradient : public TSCFLSolver
     std::unique_ptr<LRP> relaxation;
     std::unique_ptr<Subproblem> subproblem;
 
-  public:
-    // Melhor solução primal encontrada
     IloNumArray a; // melhor a[i]
     IloNumArray b; // melhor b[j]
 
+  public:
     explicit TSCFLSolverSubgradient(
         const TSCFLInstance &inst_,
         LRP::Mode rmode = LRP::Mode::CAPACITIES,

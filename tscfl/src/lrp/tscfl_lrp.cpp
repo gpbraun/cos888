@@ -15,10 +15,6 @@ Gabriel Braun, 2025
 #include "lrp/tscfl_lrp_balances.hpp"
 #include "lrp/tscfl_lrp_capacities.hpp"
 
-// ---------------------------------------------------------------------
-//  Construtor
-// ---------------------------------------------------------------------
-
 LRP::LRP(const TSCFLInstance &inst_, Mode mode_)
     : env(inst_.env),
       inst(inst_),
@@ -30,10 +26,6 @@ LRP::LRP(const TSCFLInstance &inst_, Mode mode_)
       y(env, inst_.nJ, inst_.nK)
 {
 }
-
-// ---------------------------------------------------------------------
-//  Factory
-// ---------------------------------------------------------------------
 
 std::unique_ptr<LRP>
 LRP::create(const TSCFLInstance &inst, Mode mode_)
@@ -49,47 +41,23 @@ LRP::create(const TSCFLInstance &inst, Mode mode_)
         }
 }
 
-// ---------------------------------------------------------------------
-//  Separação gulosa de flow-covers (capacidades)
-// ---------------------------------------------------------------------
-//
-// Planta i:
-//   ∑_j x_ij ≤ p_i a_i, 0 ≤ x_ij ≤ q_j
-//   Cover T ⊆ J com ∑_{j∈T} q_j > p_i
-//   Corte usado:
-//     lhs = -p_i a_i + ∑_{j∈T} x_ij
-//     rhs = ∑_{j∉T} min(q_j, overflow), overflow = ∑_{j∈T} q_j - p_i
-//
-// Depósito j:
-//   ∑_k y_jk ≤ q_j b_j, 0 ≤ y_jk ≤ r_k
-//   Cover S ⊆ K com ∑_{k∈S} r_k > q_j
-//   Corte:
-//     lhs = -q_j b_j + ∑_{k∈S} y_jk
-//     rhs = ∑_{k∉S} min(r_k, overflow), overflow = ∑_{k∈S} r_k - q_j
-//
-// Nesta versão, em vez de gerar apenas UM cover T/S por nó, geramos
-// vários (prefixos sucessivos) e mantemos apenas os cortes mais
-// violados, até max_new_cuts.
-// ---------------------------------------------------------------------
 IloInt
 LRP::separate_flow_covers(IloInt max_new_cuts)
 {
+    if (max_new_cuts <= 0)
+        return 0;
+
     const IloInt nI = inst.nI;
     const IloInt nJ = inst.nJ;
     const IloInt nK = inst.nK;
 
-    if (max_new_cuts <= 0)
-        return 0;
-
-    // Máximo de covers que tentaremos gerar por planta/depósito
+    // Máximo de covers por cada planta/depósito
     static const IloInt MAX_COVERS_PER_NODE = 3;
 
     std::vector<FlowCoverCut> candidates;
     candidates.reserve(static_cast<std::size_t>(3 * (nI + nJ)));
 
-    // -------------------------------------------------------------
-    // 1a) Cortes de planta (flow-cover em ∑_j x_ij ≤ p_i a_i)
-    // -------------------------------------------------------------
+    // Cortes de planta (flow-cover em ∑_j x_ij ≤ p_i a_i)
     for (IloInt i = 0; i < nI; ++i)
         {
             // índices j com x_ij > 0 e q_j > 0
@@ -103,7 +71,7 @@ LRP::separate_flow_covers(IloInt max_new_cuts)
             if (idx.empty())
                 continue;
 
-            // ordena por capacidade q_j decrescente (poderia usar x_ij também)
+            // ordena por capacidade q_j decrescente
             std::sort(
                 idx.begin(),
                 idx.end(),
@@ -171,9 +139,7 @@ LRP::separate_flow_covers(IloInt max_new_cuts)
                 }
         }
 
-    // -------------------------------------------------------------
-    // 1b) Cortes de depósito (flow-cover em ∑_k y_jk ≤ q_j b_j)
-    // -------------------------------------------------------------
+    // Cortes de depósito (flow-cover em ∑_k y_jk ≤ q_j b_j)
     for (IloInt j = 0; j < nJ; ++j)
         {
             // índices k com y_jk > 0 e r_k > 0
@@ -258,18 +224,14 @@ LRP::separate_flow_covers(IloInt max_new_cuts)
     if (candidates.empty())
         return 0;
 
-    // -------------------------------------------------------------
-    // 2) Ordena por violação (overflow) decrescente
-    // -------------------------------------------------------------
+    // Ordena por violação (overflow) decrescente
     std::sort(
         candidates.begin(),
         candidates.end(),
         [](const FlowCoverCut &c1, const FlowCoverCut &c2) { return c1.overflow > c2.overflow; }
     );
 
-    // -------------------------------------------------------------
-    // 3) Insere até max_new_cuts cortes realmente novos
-    // -------------------------------------------------------------
+    //  Insere até max_new_cuts cortes realmente novos
     IloInt new_cuts = 0;
     for (auto &cand : candidates)
         {
@@ -282,47 +244,17 @@ LRP::separate_flow_covers(IloInt max_new_cuts)
     return new_cuts;
 }
 
-// ---------------------------------------------------------------------
-//  Separação de subset-row (vários subconjuntos S ⊆ K)
-// ---------------------------------------------------------------------
-//
-// Para cada subconjunto S (escolhido heurísticamente como prefixos de
-// clientes ordenados por demanda), definimos:
-//
-//   R_S = sum_{k ∈ S} r_k
-//
-//   α_j^{(S)} = min(q_j, R_S) / R_S   (depósitos)
-//   β_i^{(S)} = min(p_i, R_S) / R_S   (plantas)
-//
-// e obtemos os cortes normalizados:
-//
-//   ∑_j α_j^{(S)} b_j ≥ 1   ⇒ lhs = -∑_j α_j^{(S)} b_j, rhs = -1
-//   ∑_i β_i^{(S)} a_i ≥ 1   ⇒ lhs = -∑_i β_i^{(S)} a_i, rhs = -1
-//
-// overflow = lhs - rhs = 1 - ∑ α_j^{(S)} b_j   ou   1 - ∑ β_i^{(S)} a_i
-//
-// Assim, overflow ∈ [0, 1], o que mantém a escala do subgradiente sob
-// controle.
-//
-// A função abaixo gera vários candidatos (para diferentes S) e mantém
-// apenas os mais violados, até um limite max_new_cuts.
-// ---------------------------------------------------------------------
 IloInt
 LRP::separate_subset_rows(IloInt max_new_cuts)
 {
+    if (max_new_cuts <= 0)
+        return 0;
+
     const IloInt nI = inst.nI;
     const IloInt nJ = inst.nJ;
     const IloInt nK = inst.nK;
 
-    if (max_new_cuts <= 0)
-        return 0;
-
-    if (nK <= 0)
-        return 0;
-
-    // -----------------------------------------------------------------
-    // 1) Ordena clientes por demanda r_k decrescente
-    // -----------------------------------------------------------------
+    // Ordena clientes por demanda r_k decrescente
     std::vector<IloInt> order_k(static_cast<std::size_t>(nK));
     for (IloInt k = 0; k < nK; ++k)
         order_k[static_cast<std::size_t>(k)] = k;
@@ -333,28 +265,20 @@ LRP::separate_subset_rows(IloInt max_new_cuts)
         [&](IloInt k1, IloInt k2) { return inst.r[k1] > inst.r[k2]; }
     );
 
-    // Vamos considerar apenas alguns prefixos {k_1,...,k_t} para limitar o custo.
-    // Por exemplo, no máximo PREFIX_LIMIT prefixos.
-    static const IloInt PREFIX_LIMIT = 20; // ajuste fino possível
-
     // Vetor de candidatos
     std::vector<SubsetRowCut> candidates;
-    candidates.reserve(2 * static_cast<std::size_t>(IloMin(nK, PREFIX_LIMIT)));
+    candidates.reserve(2 * static_cast<std::size_t>(nK));
 
-    // -----------------------------------------------------------------
-    // 2) Gera candidatos para vários subconjuntos S (prefixos)
-    // -----------------------------------------------------------------
+    // Gera candidatos para vários subconjuntos S (prefixos)
     IloNum R_S = 0.0;
-    for (IloInt t = 0; t < nK && t < PREFIX_LIMIT; ++t)
+    for (IloInt t = 0; t < nK; ++t)
         {
             const IloInt k_new = order_k[static_cast<std::size_t>(t)];
             R_S += inst.r[k_new];
             if (R_S <= EPS)
                 continue;
 
-            // -----------------------------
-            // 2a) Corte em DEPÓSITOS (b_j)
-            // -----------------------------
+            // Corte em DEPÓSITOS (b_j)
             {
                 IloNumArray coeff_dep(env, nJ);
                 IloNum lhs_dep = 0.0;
@@ -377,9 +301,7 @@ LRP::separate_subset_rows(IloInt max_new_cuts)
                     }
             }
 
-            // -----------------------------
-            // 2b) Corte em PLANTAS (a_i)
-            // -----------------------------
+            // Corte em PLANTAS (a_i)
             {
                 IloNumArray coeff_plant(env, nI);
                 IloNum lhs_plant = 0.0;
@@ -406,18 +328,14 @@ LRP::separate_subset_rows(IloInt max_new_cuts)
     if (candidates.empty())
         return 0;
 
-    // -----------------------------------------------------------------
-    // 3) Ordena candidatos por violação decrescente
-    // -----------------------------------------------------------------
+    // Ordena candidatos por violação decrescente
     std::sort(
         candidates.begin(),
         candidates.end(),
         [](const SubsetRowCut &c1, const SubsetRowCut &c2) { return c1.overflow > c2.overflow; }
     );
 
-    // -----------------------------------------------------------------
-    // 4) Tenta inserir até max_new_cuts cortes realmente novos
-    // -----------------------------------------------------------------
+    // Insere até max_new_cuts cortes realmente novos
     IloInt new_cuts = 0;
     for (auto &cand : candidates)
         {

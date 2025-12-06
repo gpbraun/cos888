@@ -292,7 +292,7 @@ TSCFLSolverColumnGeneration::solve(bool log_output, IloNum time_limit)
 
     if (log_output)
         {
-            std::cout << "[CG] Iniciando Geração de Colunas\n";
+            std::cout << "\n\n[CG] Iniciando Geração de Colunas\n";
             std::cout << std::right << std::setw(5) << "it" << std::setw(10) << "time(s)"
                       << std::setw(15) << "LB" << std::setw(15) << "UB" << std::setw(12) << "gap"
                       << std::setw(10) << "cols"

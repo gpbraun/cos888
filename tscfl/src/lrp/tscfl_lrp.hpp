@@ -35,10 +35,10 @@ class LRP
     Mode mode;
 
     // Solução Lagrangeana corrente
-    IloNumArray a;  // a[i]    = abre planta i (relaxação linear)
-    IloNumArray b;  // b[j]    = abre depósito j (relaxação linear)
-    IloNumMatrix x; // x[i][j] = fluxo planta i -> depósito j
-    IloNumMatrix y; // y[j][k] = fluxo depósito j -> cliente k
+    IloNumArray a;  // a[i]
+    IloNumArray b;  // b[j]
+    IloNumMatrix x; // x[i][j]
+    IloNumMatrix y; // y[j][k]
 
     explicit LRP(const TSCFLInstance &inst_, Mode mode_);
 
@@ -47,22 +47,24 @@ class LRP
     // Factory
     static std::unique_ptr<LRP> create(const TSCFLInstance &inst, Mode mode_);
 
-    // Resolve o subproblema Lagrangeano para os multiplicadores atuais e atualiza (a, b, x, y).
-    // Retorna: z_LR.
+    // Resolve o subproblema Lagrangeano para os multiplicadores atuais.
+    // Atualiza: a, b, x, y
+    // Retorna: opt.
     virtual IloNum solve() = 0;
 
     // Retorna: ||g||^2 (quadrado da norma dos subgradientes)
     virtual IloNum norm2sq() const = 0;
 
-    // Atualiza multiplicadores (l1,l2 ou m1,m2) e também multiplicadores dos cortes.
+    // Atualiza multiplicadores (l1,l2 ou m1,m2) e dos cortes.
     virtual void update_multipliers(IloNum step) = 0;
 
-    // Separa Flow Covers a partir da solução LR atual
+    // Separa cortes FlowCovers a partir da solução LR atual
     IloInt separate_flow_covers(IloInt max_new_cuts);
 
+    // Separa cortes SubsetRow a partir da solução LR atual
     IloInt separate_subset_rows(IloInt max_new_cuts);
 
-    // Acesso ao conjunto de cortes (para o solver de subgradiente)
+    // Acesso ao conjunto de cortes
     CutManager &
     getCuts()
     {

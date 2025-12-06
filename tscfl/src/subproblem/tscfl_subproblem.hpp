@@ -15,7 +15,7 @@ Gabriel Braun, 2025
 
 ILOSTLBEGIN
 
-// SOLVER DO SUBPROBLEMA: Base
+// SOLVER DO SUBPROBLEMA
 class Subproblem
 {
   protected:
@@ -30,12 +30,11 @@ class Subproblem
     };
 
     // Saída do subproblema
-    double theta{ 0.0 }; // valor ótimo do subproblema
-    double rhs{ 0.0 };   // termo independente do corte
+    IloNum opt{ 0.0 };   // valor ótimo do problema original
+    IloNum theta{ 0.0 }; // valor ótimo do subproblema
+    IloNum rhs{ 0.0 };   // termo independente do corte
     IloNumArray coef_a;  // coeficientes multiplicando a_i
     IloNumArray coef_b;  // coeficientes multiplicando b_j
-
-    double opt{ 0.0 }; // valor ótimo do problema original
 
     explicit Subproblem(const TSCFLInstance &inst_);
 
@@ -49,16 +48,15 @@ class Subproblem
     // Retorna: valor da solução primal
     virtual IloNum solve(const IloNumArray &a, const IloNumArray &b) = 0;
 
-    // Heurística primal 1:
-    // Dado (a_frac, b_frac) da solução atual do mestre, encontra a_int e b_int
-    // e resolve o subproblema.
+    // Heurística primal:
+    // Dado (a_frac, b_frac), encontra a_int e b_int e resolve o subproblema.
     // Atualiza: theta, rhs, coef_a, coef_b
-    // Retorna: valor da solução primal heurística
+    // Retorna: valor da solução primal
     IloNum solve_primal_heuristic(
         const IloNumArray &a_frac, const IloNumArray &b_frac, IloNumArray &a_int, IloNumArray &b_int
     );
 
-    // Heurística primal 2:
+    // Heurística primal:
     // Lê (a,b) fracionários direto do modelo (var_a, var_b) e chama a função acima.
     IloNum solve_primal_heuristic(
         const IloCplex &cpx,

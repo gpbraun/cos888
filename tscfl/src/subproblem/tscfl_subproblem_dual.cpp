@@ -10,10 +10,6 @@ Gabriel Braun, 2025
 
 #include <stdexcept>
 
-// ---------------------------------------------------------------------
-//  Construtor / destrutor
-// ---------------------------------------------------------------------
-
 SubproblemDual::SubproblemDual(const TSCFLInstance &inst_)
     : Subproblem(inst_),
       env(),
@@ -45,10 +41,6 @@ SubproblemDual::~SubproblemDual()
     env.end();
 }
 
-// ---------------------------------------------------------------------
-//  Modelo base do subproblema dual
-// ---------------------------------------------------------------------
-
 void
 SubproblemDual::build_base_model()
 {
@@ -68,12 +60,8 @@ SubproblemDual::build_base_model()
     model.add(obj);
 }
 
-// ---------------------------------------------------------------------
-//  Atualiza função objetivo em função de (a,b)
-// ---------------------------------------------------------------------
-
 void
-SubproblemDual::set_objective(const IloNumArray &a, const IloNumArray &b)
+SubproblemDual::update_model(const IloNumArray &a, const IloNumArray &b)
 {
     IloExpr obj_expr(env);
 
@@ -90,24 +78,20 @@ SubproblemDual::set_objective(const IloNumArray &a, const IloNumArray &b)
     obj_expr.end();
 }
 
-// ---------------------------------------------------------------------
-//  Resolve o subproblema para (a, b)
-// ---------------------------------------------------------------------
-
 IloNum
 SubproblemDual::solve(const IloNumArray &a, const IloNumArray &b)
 {
-    // 1) Atualiza a função objetivo
-    set_objective(a, b);
+    // Atualiza a função objetivo
+    update_model(a, b);
 
-    // 2) Resolve o LP dual
+    // Resolve o LP dual
     if (!cplex.solve())
         throw std::runtime_error("SubproblemDual: falha no CPLEX.");
 
-    // 3) Valor ótimo do dual
+    // Valor ótimo do dual
     theta = cplex.getObjValue();
 
-    // 4) Coeficientes do corte de Benders
+    // Coeficientes do corte de Benders
     for (int i = 0; i < inst.nI; ++i)
         coef_a[i] = inst.p[i] * cplex.getValue(var_l1[i]);
 

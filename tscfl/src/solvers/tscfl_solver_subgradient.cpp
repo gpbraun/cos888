@@ -51,7 +51,7 @@ TSCFLSolverSubgradient::solve(bool log_output, IloNum time_limit)
 
     if (log_output)
         {
-            std::cout << "[SG] Iniciando Subgradiente\n\n"
+            std::cout << "\n\n[SG] Iniciando Subgradiente\n\n"
                       << std::right << std::setw(5) << "iter" << std::setw(10) << "no improve"
                       << std::setw(10) << "time(s)" << std::setw(15) << "opt_LR" << std::setw(15)
                       << "LB" << std::setw(15) << "UB" << std::setw(12) << "gap" << std::setw(12)

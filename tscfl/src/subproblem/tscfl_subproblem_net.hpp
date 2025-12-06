@@ -54,5 +54,5 @@ class SubproblemNet : public Subproblem
     void build_base_net();
 
     // Atualiza as capacidades dos arcos que dependem de (a,b)
-    void set_capacities(const IloNumArray &a_vals, const IloNumArray &b_vals);
+    void update_net(const IloNumArray &a_vals, const IloNumArray &b_vals);
 };

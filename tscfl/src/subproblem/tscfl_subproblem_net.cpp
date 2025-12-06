@@ -10,10 +10,6 @@ Gabriel Braun, 2025
 
 #include <stdexcept>
 
-// ---------------------------------------------------------------------
-//  Construtor / destrutor
-// ---------------------------------------------------------------------
-
 SubproblemNet::SubproblemNet(const TSCFLInstance &inst_)
     : Subproblem(inst_),
       status(0),
@@ -56,10 +52,6 @@ SubproblemNet::~SubproblemNet()
             env = nullptr;
         }
 }
-
-// ---------------------------------------------------------------------
-//  Constrói a rede base
-// ---------------------------------------------------------------------
 
 void
 SubproblemNet::build_base_net()
@@ -109,7 +101,7 @@ SubproblemNet::build_base_net()
 
     int arcId = 0;
 
-    // 2.1) Arcos s -> plant_i (capacidade p_i * a_i, custo 0)
+    // Arcos s -> plant_i (capacidade p_i * a_i, custo 0)
     for (int i = 0; i < nI; ++i)
         {
             int u = node_s;
@@ -125,7 +117,7 @@ SubproblemNet::build_base_net()
             ++arcId;
         }
 
-    // 2.2) Arcos plant_i -> depotIn_j (custo c_ij, cap = +inf)
+    // Arcos plant_i -> depotIn_j (custo c_ij, cap = +inf)
     for (int i = 0; i < nI; ++i)
         {
             int u = nodePlant(i);
@@ -143,7 +135,7 @@ SubproblemNet::build_base_net()
                 }
         }
 
-    // 2.3) Arcos depotIn_j -> depotOut_j (capacidade q_j * b_j, custo 0)
+    // Arcos depotIn_j -> depotOut_j (capacidade q_j * b_j, custo 0)
     for (int j = 0; j < nJ; ++j)
         {
             int u = nodeDepotIn(j);
@@ -159,7 +151,7 @@ SubproblemNet::build_base_net()
             ++arcId;
         }
 
-    // 2.4) Arcos depotOut_j -> cust_k (custo d_jk, cap = +inf)
+    // Arcos depotOut_j -> cust_k (custo d_jk, cap = +inf)
     for (int j = 0; j < nJ; ++j)
         {
             int u = nodeDepotOut(j);
@@ -177,7 +169,7 @@ SubproblemNet::build_base_net()
                 }
         }
 
-    // 2.5) Arcos cust_k -> t (capacidade r_k, custo 0)
+    // Arcos cust_k -> t (capacidade r_k, custo 0)
     for (int k = 0; k < nK; ++k)
         {
             int u = nodeCust(k);
@@ -192,7 +184,7 @@ SubproblemNet::build_base_net()
             ++arcId;
         }
 
-    // 2.6) Adiciona nós e arcos no CPXNET
+    // Adiciona nós e arcos no CPXNET
     status = CPXNETaddnodes(env, net, nN, supply.data(), nullptr);
     if (status)
         {
@@ -214,12 +206,8 @@ SubproblemNet::build_base_net()
         }
 }
 
-// ---------------------------------------------------------------------
-//  Atualiza capacidades que dependem de (a,b)
-// ---------------------------------------------------------------------
-
 void
-SubproblemNet::set_capacities(const IloNumArray &a, const IloNumArray &b)
+SubproblemNet::update_net(const IloNumArray &a, const IloNumArray &b)
 {
     const int nI = inst.nI;
     const int nJ = inst.nJ;
@@ -245,10 +233,6 @@ SubproblemNet::set_capacities(const IloNumArray &a, const IloNumArray &b)
         throw std::runtime_error("SubproblemNet: falha em CPXNETchgbds.");
 }
 
-// ---------------------------------------------------------------------
-//  Resolve o subproblema para (a, b)
-// ---------------------------------------------------------------------
-
 IloNum
 SubproblemNet::solve(const IloNumArray &a, const IloNumArray &b)
 {
@@ -256,10 +240,10 @@ SubproblemNet::solve(const IloNumArray &a, const IloNumArray &b)
     const int nJ = inst.nJ;
     const int nK = inst.nK;
 
-    // 1) Atualiza capacidades dos arcos dependentes de (a,b)
-    set_capacities(a, b);
+    // Atualiza capacidades dos arcos dependentes de (a,b)
+    update_net(a, b);
 
-    // 2) Resolve o problema de fluxo mínimo
+    // Resolve o problema de fluxo mínimo
     status = CPXNETprimopt(env, net);
     if (status)
         throw std::runtime_error("SubproblemNet: falha em CPXNETprimopt.");
@@ -271,7 +255,7 @@ SubproblemNet::solve(const IloNumArray &a, const IloNumArray &b)
 
     theta = obj_val;
 
-    // 3) Lê potenciais de nó (pi) e custos reduzidos (dj)
+    // Lê potenciais de nó (pi) e custos reduzidos (dj)
     std::vector<double> pi(nN);
     std::vector<double> dj(nA);
 
@@ -283,7 +267,7 @@ SubproblemNet::solve(const IloNumArray &a, const IloNumArray &b)
     if (status)
         throw std::runtime_error("SubproblemNet: falha em CPXNETgetdj.");
 
-    // 4) Mapeia duais para cortes de Benders e calcula coeficientes
+    // Mapeia duais para cortes de Benders e calcula coeficientes
     //   l1_i  = dj[ arcPlantCap[i] ]
     //   l2_j  = dj[ arcDepotCap[j] ]
     //   m2_k  = pi_s - pi_cust(k)
