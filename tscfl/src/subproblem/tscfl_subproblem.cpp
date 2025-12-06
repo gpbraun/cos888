@@ -1,6 +1,11 @@
-// src/subproblem.cpp
+/*
+COS888
 
-// Ajuste os nomes desses headers conforme seus arquivos concretos:
+tscfl_subproblem.cpp
+
+Gabriel Braun, 2025
+*/
+
 #include "tscfl_subproblem.hpp"
 
 #include <algorithm>
@@ -54,7 +59,6 @@ Subproblem::solve_primal_heuristic(
 )
 {
     IloNum demand_sum = IloSum(inst.r);
-
     fill_zero(a_int);
     fill_zero(b_int);
 

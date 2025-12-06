@@ -1,4 +1,11 @@
-// src/subproblem_primal.cpp
+/*
+COS888
+
+tscfl_subproblem_primal.cpp
+
+Gabriel Braun, 2025
+*/
+
 #include "tscfl_subproblem_primal.hpp"
 
 #include <stdexcept>
@@ -90,26 +97,26 @@ SubproblemPrimal::build_base_model()
 // ---------------------------------------------------------------------
 
 void
-SubproblemPrimal::set_constraints(const IloNumArray &a_vals, const IloNumArray &b_vals)
+SubproblemPrimal::set_constraints(const IloNumArray &a, const IloNumArray &b)
 {
     // Capacidade das plantas
     for (int i = 0; i < inst.nI; ++i)
-        constr_l1[i].setBounds(-IloInfinity, inst.p[i] * a_vals[i]);
+        constr_l1[i].setBounds(-IloInfinity, inst.p[i] * a[i]);
 
     // Capacidade dos depósitos
     for (int j = 0; j < inst.nJ; ++j)
-        constr_l2[j].setBounds(-IloInfinity, inst.q[j] * b_vals[j]);
+        constr_l2[j].setBounds(-IloInfinity, inst.q[j] * b[j]);
 }
 
 // ---------------------------------------------------------------------
-//  Resolve o subproblema para (a_vals, b_vals)
+//  Resolve o subproblema para (a, b)
 // ---------------------------------------------------------------------
 
-void
-SubproblemPrimal::solve(const IloNumArray &a_vals, const IloNumArray &b_vals)
+IloNum
+SubproblemPrimal::solve(const IloNumArray &a, const IloNumArray &b)
 {
     // 1) Atualiza as restrições dependentes de (a,b)
-    set_constraints(a_vals, b_vals);
+    set_constraints(a, b);
 
     // 2) Resolve o LP primal
     if (!cplex.solve())
@@ -138,4 +145,7 @@ SubproblemPrimal::solve(const IloNumArray &a_vals, const IloNumArray &b_vals)
     l1.end();
     l2.end();
     m2.end();
+
+    opt = IloScalProd(inst.f, a) + IloScalProd(inst.g, b) + theta;
+    return opt;
 }

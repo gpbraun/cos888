@@ -13,27 +13,51 @@ Gabriel Braun, 2025
 // ---------------------------------------------------------------------
 
 LRPCapacity::LRPCapacity(const TSCFLInstance &inst_)
-    : LRP(inst_),
+    : LRP(inst_, Mode::CAPACITIES),
       l1(env, inst_.nI),
       l2(env, inst_.nJ),
       g1(env, inst_.nI),
-      g2(env, inst_.nJ)
+      g2(env, inst_.nJ),
+      best_inner_c(inst_.env, inst_.nJ),
+      best_inner_i(inst_.env, inst_.nJ)
 {
 }
 
 // ---------------------------------------------------------------------
 //  solve
 // ---------------------------------------------------------------------
-
 IloNum
 LRPCapacity::solve()
 {
-    // 0) Zera fluxos e atualiza custos induzidos pelos cortes
+    // Zera fluxos, subgradientes e atualiza custos induzidos pelos cortes
     fill_zero(x);
     fill_zero(y);
+    fill_zero(g1);
+    fill_zero(g2);
+
     cuts.update_costs();
 
-    // 1) Para cada cliente k: envia r_k para o par (i,j) de menor custo reduzido
+    // Para cada satélite j, escolhe a melhor planta i
+    for (IloInt j = 0; j < inst.nJ; ++j)
+        {
+            IloNum best_c = IloInfinity;
+            IloInt best_i = -1;
+
+            for (IloInt i = 0; i < inst.nI; ++i)
+                {
+                    IloNum c_ij = inst.c[i][j] + l1[i] + cuts.cost_x[i][j];
+                    if (c_ij < best_c)
+                        {
+                            best_c = c_ij;
+                            best_i = i;
+                        }
+                }
+
+            best_inner_c[j] = best_c;
+            best_inner_i[j] = best_i;
+        }
+
+    // Para cada cliente k: manda r_k via melhor j (e o i escolhido em 1a)
     for (IloInt k = 0; k < inst.nK; ++k)
         {
             IloNum rk = inst.r[k];
@@ -41,35 +65,40 @@ LRPCapacity::solve()
                 continue;
 
             IloNum best_cost = IloInfinity;
-            IloInt best_i = -1;
             IloInt best_j = -1;
 
-            for (IloInt i = 0; i < inst.nI; ++i)
+            for (IloInt j = 0; j < inst.nJ; ++j)
                 {
-                    for (IloInt j = 0; j < inst.nJ; ++j)
-                        {
-                            IloNum cost = inst.c[i][j] + inst.d[j][k] + l1[i] + l2[j]
-                                          + cuts.cost_x[i][j] + cuts.cost_y[j][k];
+                    // d_jk + l2_j + cost_y_jk depende de (j,k), não de i
+                    IloNum cost_jk = best_inner_c[j] + l2[j] + inst.d[j][k] + cuts.cost_y[j][k];
 
-                            if (cost < best_cost)
-                                {
-                                    best_cost = cost;
-                                    best_i = i;
-                                    best_j = j;
-                                }
+                    if (cost_jk < best_cost)
+                        {
+                            best_cost = cost_jk;
+                            best_j = j;
                         }
                 }
 
+            IloInt best_i = best_inner_i[best_j];
+
+            // Atualiza fluxos
             x[best_i][best_j] += rk;
             y[best_j][k] += rk;
+
+            // Acumula parte dos subgradientes
+            g1[best_i] += rk;
+            g2[best_j] += rk;
         }
 
-    // 2) Decisão de abertura via custo reduzido dos termos fixos
+    // Decisão de abertura via custo reduzido dos termos fixos
     for (IloInt i = 0; i < inst.nI; ++i)
         {
             // f_i - l1_i * p_i + contribuição de cortes
             IloNum f_tilde = inst.f[i] - l1[i] * inst.p[i] + cuts.cost_a[i];
             a[i] = (f_tilde < 0.0 ? 1.0 : 0.0);
+
+            // completa subgradiente: g1[i] = sum_j x_ij - p_i * a_i
+            g1[i] -= inst.p[i] * a[i];
         }
 
     for (IloInt j = 0; j < inst.nJ; ++j)
@@ -77,16 +106,12 @@ LRPCapacity::solve()
             // g_j - l2_j * q_j + contribuição de cortes
             IloNum b_tilde = inst.g[j] - l2[j] * inst.q[j] + cuts.cost_b[j];
             b[j] = (b_tilde < 0.0 ? 1.0 : 0.0);
+
+            // g2[j] = sum_k y_jk - q_j * b_j
+            g2[j] -= inst.q[j] * b[j];
         }
 
-    // 3) Subgradientes das capacidades
-    for (IloInt i = 0; i < inst.nI; ++i)
-        g1[i] = IloSum(x[i]) - inst.p[i] * a[i];
-
-    for (IloInt j = 0; j < inst.nJ; ++j)
-        g2[j] = IloSum(y[j]) - inst.q[j] * b[j];
-
-    // 4) Retorna o valor da Lagrangeana
+    // Valor da Lagrangeana
     return IloScalProd(inst.f, a) + IloScalProd(inst.g, b) + IloMatScalProd(inst.c, x)
            + IloMatScalProd(inst.d, y) + IloScalProd(l1, g1) + IloScalProd(l2, g2);
 }

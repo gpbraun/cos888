@@ -37,6 +37,8 @@ bool
 TSCFLSolverSubgradient::solve(bool log_output, IloNum time_limit)
 {
     IloInt last_improv_iter = 0;
+    IloInt last_eps_update_iter = 0;
+
     IloNum epsilon = EPSILON0;
 
     auto t0 = std::chrono::steady_clock::now();
@@ -50,13 +52,13 @@ TSCFLSolverSubgradient::solve(bool log_output, IloNum time_limit)
     if (log_output)
         {
             std::cout << "[SG] Iniciando Subgradiente\n\n"
-                      << std::right << std::setw(5) << "it" << std::setw(10) << "time(s)"
-                      << std::setw(15) << "opt_LR" << std::setw(15) << "LB" << std::setw(15) << "UB"
-                      << std::setw(12) << "gap" << std::setw(12) << "step" << std::setw(12)
-                      << "||g||^2" << std::setw(10) << "|CA|" << std::setw(10) << "|PA|"
-                      << std::setw(10) << "|CI|"
+                      << std::right << std::setw(5) << "iter" << std::setw(10) << "no improve"
+                      << std::setw(10) << "time(s)" << std::setw(15) << "opt_LR" << std::setw(15)
+                      << "LB" << std::setw(15) << "UB" << std::setw(12) << "gap" << std::setw(12)
+                      << "step" << std::setw(12) << "||g||^2" << std::setw(10) << "|CA|"
+                      << std::setw(10) << "|PA|" << std::setw(10) << "|CI|"
                       << "\n"
-                      << std::string(130, '-') << "\n"
+                      << std::string(140, '-') << "\n"
                       << std::defaultfloat;
         }
 
@@ -77,9 +79,16 @@ TSCFLSolverSubgradient::solve(bool log_output, IloNum time_limit)
                     last_improv_iter = iter;
                 }
 
-            // Gerencia os cortes
-            // LR.separate_flow_covers (MAX_NEW_CUTS_PER_ITER);
-            LR.separate_subset_rows(MAX_NEW_CUTS_PER_ITER);
+            // Separa e gerencia os cortes
+            if (LR.mode == LRP::Mode::CAPACITIES)
+                {
+                    LR.separate_flow_covers(MAX_NEW_CUTS);
+                }
+            else if (LR.mode == LRP::Mode::BALANCES)
+                {
+                    LR.separate_subset_rows(MAX_NEW_CUTS);
+                }
+
             cuts.update_status(LR.x, LR.y, LR.a, LR.b, EXTRA_AGE);
 
             // Heurística primal periódica
@@ -89,15 +98,12 @@ TSCFLSolverSubgradient::solve(bool log_output, IloNum time_limit)
                     if (opt_h + EPS < ub)
                         {
                             ub = opt_h;
-                            a = a_h;
-                            b = b_h;
+                            a = LR.a;
+                            b = LR.b;
                         }
                 }
 
-            if (ub < IloInfinity && lb > -IloInfinity && ub > lb)
-                {
-                    gap = (ub - lb) / IloMax(1.0, IloAbs(ub));
-                };
+            update_gap();
 
             // Passo do subgradiente
             IloNum norm2 = LR.norm2sq();
@@ -105,14 +111,15 @@ TSCFLSolverSubgradient::solve(bool log_output, IloNum time_limit)
             if (norm2 > EPS)
                 step = IloMax(epsilon * (ub - opt_lr) / norm2, 0.0);
 
-            // Atualiza multiplicadores (capacidades + cortes)
+            // Atualiza multiplicadores
             LR.update_multipliers(step);
 
             // Atualiza epsilon se necessário
-            if (iter - last_improv_iter >= MAX_NO_IMPROV)
+            if (iter - last_improv_iter >= IMPROV_EPSILON
+                && iter - last_eps_update_iter >= IMPROV_EPSILON)
                 {
                     epsilon *= 0.5;
-                    last_improv_iter = iter;
+                    last_eps_update_iter = iter;
                 }
 
             // Log parcial
@@ -122,23 +129,21 @@ TSCFLSolverSubgradient::solve(bool log_output, IloNum time_limit)
                     IloInt nPA = cuts.count(Cut::Status::PA);
                     IloInt nCI = cuts.count(Cut::Status::CI);
 
-                    std::cout << std::right << std::setw(5)
-                              << iter
-                              // tempo
-                              << std::fixed << std::setprecision(1) << std::setw(10)
-                              << elapsed
-                              // z_LR, LB, UB
-                              << std::fixed << std::setprecision(0) << std::setw(15) << opt_lr
-                              << std::setw(15) << lb << std::setw(15)
-                              << ub
-                              // gap, step, ||g||^2
-                              << std::scientific << std::setprecision(2) << std::setw(12) << gap
-                              << std::setw(12) << step << std::setw(12)
-                              << norm2
-                              // tamanhos dos conjuntos de cortes
+                    std::cout << std::right << std::setw(5) << iter << std::setw(10)
+                              << (iter - last_improv_iter) << std::fixed << std::setprecision(1)
+                              << std::setw(10) << elapsed << std::fixed << std::setprecision(0)
+                              << std::setw(15) << opt_lr << std::setw(15) << lb << std::setw(15)
+                              << ub << std::scientific << std::setprecision(2) << std::setw(12)
+                              << gap << std::setw(12) << step << std::setw(12) << norm2
                               << std::fixed << std::setw(10) << nCA << std::setw(10) << nPA
                               << std::setw(10) << nCI << "\n"
                               << std::defaultfloat;
+                }
+
+            // Critério de parada por iterações sem melhora
+            if (iter - last_improv_iter >= MAX_NO_IMPROV)
+                {
+                    break;
                 }
 
             // Critério de parada por gap
@@ -154,31 +159,12 @@ TSCFLSolverSubgradient::solve(bool log_output, IloNum time_limit)
     auto t_end = std::chrono::steady_clock::now();
     time = std::chrono::duration<IloNum>(t_end - t0).count();
 
-    if (status == IloAlgorithm::Unknown)
-        {
-            if (ub < IloInfinity && lb > 0.0)
-                status = IloAlgorithm::Feasible;
-        }
+    update_status();
 
+    // Log final
     if (log_output)
         {
-            std::cout << "\n\n"
-                      << "[RC] Subgradiente finalizado.\n\n"
-                      << "status = " << status
-                      << "\n"
-                      // iter
-                      << std::fixed << std::setprecision(0) << "iter   = " << iter
-                      << "\n"
-                      // tempo
-                      << std::fixed << std::setprecision(1) << "time   = " << time
-                      << " s\n"
-                      // LB, UB
-                      << std::fixed << std::setprecision(0) << "LB     = " << lb << "\n"
-                      << "UB     = " << ub
-                      << "\n"
-                      // gap
-                      << std::scientific << std::setprecision(2) << "gap    = " << gap << "\n"
-                      << std::defaultfloat;
+            print_summary("SUBGRADIENTE");
         }
 
     return (status == IloAlgorithm::Optimal);

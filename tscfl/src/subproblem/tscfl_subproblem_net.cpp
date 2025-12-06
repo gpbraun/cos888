@@ -1,4 +1,11 @@
-// src/subproblem_net.cpp
+/*
+COS888
+
+tscfl_subproblem_net.cpp
+
+Gabriel Braun, 2025
+*/
+
 #include "tscfl_subproblem_net.hpp"
 
 #include <stdexcept>
@@ -212,7 +219,7 @@ SubproblemNet::build_base_net()
 // ---------------------------------------------------------------------
 
 void
-SubproblemNet::set_capacities(const IloNumArray &a_vals, const IloNumArray &b_vals)
+SubproblemNet::set_capacities(const IloNumArray &a, const IloNumArray &b)
 {
     const int nI = inst.nI;
     const int nJ = inst.nJ;
@@ -225,12 +232,12 @@ SubproblemNet::set_capacities(const IloNumArray &a_vals, const IloNumArray &b_va
     for (int i = 0; i < nI; ++i)
         {
             idx[i] = arcPlantCap[i];
-            bd[i] = inst.p[i] * a_vals[i];
+            bd[i] = inst.p[i] * a[i];
         }
     for (int j = 0; j < nJ; ++j)
         {
             idx[nI + j] = arcDepotCap[j];
-            bd[nI + j] = inst.q[j] * b_vals[j];
+            bd[nI + j] = inst.q[j] * b[j];
         }
 
     status = CPXNETchgbds(env, net, cnt, idx.data(), lu.data(), bd.data());
@@ -239,18 +246,18 @@ SubproblemNet::set_capacities(const IloNumArray &a_vals, const IloNumArray &b_va
 }
 
 // ---------------------------------------------------------------------
-//  Resolve o subproblema para (a_vals, b_vals)
+//  Resolve o subproblema para (a, b)
 // ---------------------------------------------------------------------
 
-void
-SubproblemNet::solve(const IloNumArray &a_vals, const IloNumArray &b_vals)
+IloNum
+SubproblemNet::solve(const IloNumArray &a, const IloNumArray &b)
 {
     const int nI = inst.nI;
     const int nJ = inst.nJ;
     const int nK = inst.nK;
 
     // 1) Atualiza capacidades dos arcos dependentes de (a,b)
-    set_capacities(a_vals, b_vals);
+    set_capacities(a, b);
 
     // 2) Resolve o problema de fluxo mínimo
     status = CPXNETprimopt(env, net);
@@ -303,4 +310,7 @@ SubproblemNet::solve(const IloNumArray &a_vals, const IloNumArray &b_vals)
             double m2_k = pi_s - pi[node_k];
             rhs += inst.r[k] * m2_k;
         }
+
+    opt = IloScalProd(inst.f, a) + IloScalProd(inst.g, b) + theta;
+    return opt;
 }

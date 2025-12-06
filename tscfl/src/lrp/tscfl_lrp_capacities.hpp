@@ -22,6 +22,9 @@ class LRPCapacity : public LRP
     IloNumArray g1; // g1[i] = sum_j x_ij - p_i a_i
     IloNumArray g2; // g2[j] = sum_k y_jk - q_j b_j
 
+    IloNumArray best_inner_c;
+    IloIntArray best_inner_i;
+
   public:
     explicit LRPCapacity(const TSCFLInstance &inst_);
 

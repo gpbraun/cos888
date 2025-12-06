@@ -10,6 +10,7 @@ Gabriel Braun, 2025
 
 #include "lrp/tscfl_lrp.hpp"
 
+// SOLVER DA RELAXAÇÃO LAGRANGEANA: Balanços relaxados
 class LRPBalance : public LRP
 {
   private:

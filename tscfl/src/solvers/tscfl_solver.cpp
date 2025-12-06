@@ -1,0 +1,78 @@
+/*
+COS888
+
+tscfl_solver.cpp
+
+Gabriel Braun, 2025
+*/
+
+#include "tscfl_solver.hpp"
+
+#include <iomanip>
+#include <iostream>
+
+// =====================================================================
+//  Construtor
+// =====================================================================
+
+TSCFLSolver::TSCFLSolver(const TSCFLInstance &inst_)
+    : env(inst_.env),
+      inst(inst_),
+      lb(0.0),
+      ub(IloInfinity),
+      gap(IloInfinity),
+      time(0.0),
+      iter(0),
+      nodes(0),
+      status(IloAlgorithm::Unknown)
+{
+}
+
+// =====================================================================
+//  Utilitários protegidos
+// =====================================================================
+void
+TSCFLSolver::update_gap()
+{
+    if (ub < IloInfinity && lb > EPS && ub > lb)
+        {
+            gap = (ub - lb) / IloAbs(ub);
+        }
+}
+
+void
+TSCFLSolver::update_status()
+{
+    if (status == IloAlgorithm::Unknown)
+        {
+            if (ub < IloInfinity && lb > EPS)
+                {
+                    status = IloAlgorithm::Feasible;
+                }
+        }
+}
+
+void
+TSCFLSolver::print_summary(const char *tag) const
+{
+    std::cout << "\n\n"
+              << "[" << tag << "] Solver finalizado.\n\n"
+              << "status = " << status
+              << "\n"
+              // nodes
+              << std::fixed << std::setprecision(0) << "nodes  = " << nodes
+              << "\n"
+              // nodes
+              << std::fixed << std::setprecision(0) << "iters  = " << iter
+              << "\n"
+              // tempo
+              << std::fixed << std::setprecision(1) << "time   = " << time
+              << " s\n"
+              // LB, UB
+              << std::fixed << std::setprecision(0) << "LB     = " << lb << "\n"
+              << "UB     = " << ub
+              << "\n"
+              // gap
+              << std::scientific << std::setprecision(2) << "gap    = " << gap << "\n"
+              << std::defaultfloat;
+}

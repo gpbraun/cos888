@@ -1,4 +1,11 @@
-// src/subproblem_dual.cpp
+/*
+COS888
+
+tscfl_subproblem_dual.cpp
+
+Gabriel Braun, 2025
+*/
+
 #include "tscfl_subproblem_dual.hpp"
 
 #include <stdexcept>
@@ -66,15 +73,15 @@ SubproblemDual::build_base_model()
 // ---------------------------------------------------------------------
 
 void
-SubproblemDual::set_objective(const IloNumArray &a_vals, const IloNumArray &b_vals)
+SubproblemDual::set_objective(const IloNumArray &a, const IloNumArray &b)
 {
     IloExpr obj_expr(env);
 
     for (int i = 0; i < inst.nI; ++i)
-        obj_expr += (inst.p[i] * a_vals[i]) * var_l1[i];
+        obj_expr += (inst.p[i] * a[i]) * var_l1[i];
 
     for (int j = 0; j < inst.nJ; ++j)
-        obj_expr += (inst.q[j] * b_vals[j]) * var_l2[j];
+        obj_expr += (inst.q[j] * b[j]) * var_l2[j];
 
     for (int k = 0; k < inst.nK; ++k)
         obj_expr += inst.r[k] * var_m2[k];
@@ -84,14 +91,14 @@ SubproblemDual::set_objective(const IloNumArray &a_vals, const IloNumArray &b_va
 }
 
 // ---------------------------------------------------------------------
-//  Resolve o subproblema para (a_vals, b_vals)
+//  Resolve o subproblema para (a, b)
 // ---------------------------------------------------------------------
 
-void
-SubproblemDual::solve(const IloNumArray &a_vals, const IloNumArray &b_vals)
+IloNum
+SubproblemDual::solve(const IloNumArray &a, const IloNumArray &b)
 {
     // 1) Atualiza a função objetivo
-    set_objective(a_vals, b_vals);
+    set_objective(a, b);
 
     // 2) Resolve o LP dual
     if (!cplex.solve())
@@ -110,4 +117,7 @@ SubproblemDual::solve(const IloNumArray &a_vals, const IloNumArray &b_vals)
     rhs = 0.0;
     for (int k = 0; k < inst.nK; ++k)
         rhs += inst.r[k] * cplex.getValue(var_m2[k]);
+
+    opt = IloScalProd(inst.f, a) + IloScalProd(inst.g, b) + theta;
+    return opt;
 }

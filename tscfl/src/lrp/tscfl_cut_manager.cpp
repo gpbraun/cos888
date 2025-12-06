@@ -10,6 +10,8 @@ Gabriel Braun, 2025
 #include <functional>
 #include <string>
 
+#include "lrp/tscfl_cut_manager.hpp"
+
 // =====================================================================
 //  Cut – implementação
 // =====================================================================

@@ -11,7 +11,7 @@ Gabriel Braun, 2025
 ILOSTLBEGIN
 
 LRPBalance::LRPBalance(const TSCFLInstance &inst_)
-    : LRP(inst_),
+    : LRP(inst_, Mode::BALANCES),
       m1(env, inst_.nK),
       m2(env, inst_.nJ),
       g1(env, inst_.nK),
@@ -181,26 +181,9 @@ LRPBalance::solve()
             g2[j] = sum_x - sum_y;
         }
 
-    // ==========================================================
-    // 4) Valor da Lagrangeana
-    //
-    //    L(a,b,x,y; m1,m2,u_cuts) =
-    //        f^T a + g^T b
-    //      + c : x + d : y
-    //      + m1^T g1 + m2^T g2
-    //
-    //  Obs: contribuições dos cortes entram via custos em (a,b,x,y)
-    //       através de cuts.update_costs().
-    // ==========================================================
-    IloNum val = 0.0;
-    val += IloScalProd(inst.f, a);
-    val += IloScalProd(inst.g, b);
-    val += IloMatScalProd(inst.c, x);
-    val += IloMatScalProd(inst.d, y);
-    val += IloScalProd(m1, g1);
-    val += IloScalProd(m2, g2);
-
-    return val;
+    // Valor da Lagrangeana
+    return IloScalProd(inst.f, a) + IloScalProd(inst.g, b) + IloMatScalProd(inst.c, x)
+           + IloMatScalProd(inst.d, y) + IloScalProd(m1, g1) + IloScalProd(m2, g2);
 }
 
 // ||g||^2 = ||g1||^2 + ||g2||^2 + contribuição dos cortes

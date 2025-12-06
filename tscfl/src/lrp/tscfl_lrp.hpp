@@ -32,18 +32,20 @@ class LRP
         BALANCES,
     };
 
+    Mode mode;
+
     // Solução Lagrangeana corrente
     IloNumArray a;  // a[i]    = abre planta i (relaxação linear)
     IloNumArray b;  // b[j]    = abre depósito j (relaxação linear)
     IloNumMatrix x; // x[i][j] = fluxo planta i -> depósito j
     IloNumMatrix y; // y[j][k] = fluxo depósito j -> cliente k
 
-    explicit LRP(const TSCFLInstance &inst_);
+    explicit LRP(const TSCFLInstance &inst_, Mode mode_);
 
     virtual ~LRP() = default;
 
     // Factory
-    static std::unique_ptr<LRP> create(const TSCFLInstance &inst, Mode mode);
+    static std::unique_ptr<LRP> create(const TSCFLInstance &inst, Mode mode_);
 
     // Resolve o subproblema Lagrangeano para os multiplicadores atuais e atualiza (a, b, x, y).
     // Retorna: z_LR.

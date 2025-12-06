@@ -327,10 +327,6 @@ TSCFLSolverBenders::solve(bool log_output, double time_limit)
             lb = cplex.getBestObjValue();
 
             print_summary("BENDERS");
-            // valor de eta*
-            std::cout << std::fixed << std::setprecision(0)
-                      << "eta*   = " << cplex.getValue(var_eta) << "\n"
-                      << std::defaultfloat;
         }
     else
         {

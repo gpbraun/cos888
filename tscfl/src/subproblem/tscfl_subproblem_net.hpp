@@ -1,4 +1,11 @@
-// src/subproblem_net.hpp
+/*
+COS888
+
+tscfl_subproblem_net.hpp
+
+Gabriel Braun, 2025
+*/
+
 #pragma once
 
 /*
@@ -40,7 +47,7 @@ class SubproblemNet : public Subproblem
 
     // Dado (a_vals, b_vals) da solução atual do mestre, resolve o subproblema.
     // Atualiza: theta, rhs, coef_a, coef_b
-    void solve(const IloNumArray &a_vals, const IloNumArray &b_vals) override;
+    IloNum solve(const IloNumArray &a_vals, const IloNumArray &b_vals) override;
 
   private:
     // Constrói a rede base

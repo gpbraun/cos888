@@ -19,10 +19,11 @@ Gabriel Braun, 2025
 //  Construtor
 // ---------------------------------------------------------------------
 
-LRP::LRP(const TSCFLInstance &inst_)
+LRP::LRP(const TSCFLInstance &inst_, Mode mode_)
     : env(inst_.env),
       inst(inst_),
       cuts(inst_),
+      mode(mode_),
       a(env, inst_.nI),
       b(env, inst_.nJ),
       x(env, inst_.nI, inst_.nJ),
@@ -35,9 +36,9 @@ LRP::LRP(const TSCFLInstance &inst_)
 // ---------------------------------------------------------------------
 
 std::unique_ptr<LRP>
-LRP::create(const TSCFLInstance &inst, Mode mode)
+LRP::create(const TSCFLInstance &inst, Mode mode_)
 {
-    switch (mode)
+    switch (mode_)
         {
         case Mode::CAPACITIES:
             return std::make_unique<LRPCapacity>(inst);

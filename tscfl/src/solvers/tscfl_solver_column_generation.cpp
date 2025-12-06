@@ -347,10 +347,7 @@ TSCFLSolverColumnGeneration::solve(bool log_output, IloNum time_limit)
                     b = b_h;
                 }
 
-            if (ub < IloInfinity && lb > 0.0 && ub > lb + EPS)
-                {
-                    gap = (ub - lb) / IloMax(1.0, IloAbs(ub));
-                }
+            update_gap();
 
             // ---------------------------------------------------------
             // Recupera duais para fazer pricing
@@ -437,24 +434,13 @@ TSCFLSolverColumnGeneration::solve(bool log_output, IloNum time_limit)
     auto t_end = std::chrono::steady_clock::now();
     time = std::chrono::duration<IloNum>(t_end - t0).count();
 
-    if (status == IloAlgorithm::Unknown)
-        {
-            if (ub < IloInfinity && lb > 0.0)
-                {
-                    status = IloAlgorithm::Feasible;
-                }
-        }
+    update_status();
 
     // Log final
-    std::cout << "\n\n"
-              << "[CG] Geração de colunas finalizado.\n\n"
-              << "status = " << status << "\n"
-              << std::fixed << std::setprecision(0) << "iter   = " << iter << "\n"
-              << std::fixed << std::setprecision(1) << "time   = " << time << " s\n"
-              << std::fixed << std::setprecision(0) << "LB     = " << lb << "\n"
-              << "UB     = " << ub << "\n"
-              << std::scientific << std::setprecision(2) << "gap    = " << gap << "\n"
-              << std::defaultfloat;
+    if (log_output)
+        {
+            print_summary("GERAÇÃO DE COLUNAS");
+        }
 
     return (status == IloAlgorithm::Optimal);
 }

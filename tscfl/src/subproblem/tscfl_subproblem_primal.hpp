@@ -1,13 +1,12 @@
-// src/subproblem_primal.hpp
-#pragma once
-
 /*
 COS888
 
-SubproblemPrimal: resolve o subproblema primal do TSCFL.
+tscfl_subproblem_net.hpp
 
 Gabriel Braun, 2025
 */
+
+#pragma once
 
 #include "tscfl_subproblem.hpp"
 
@@ -35,12 +34,12 @@ class SubproblemPrimal : public Subproblem
 
     // Dado (a_vals, b_vals) da solução atual do mestre, resolve o subproblema.
     // Atualiza: theta, rhs, coef_a, coef_b
-    void solve(const IloNumArray &a_vals, const IloNumArray &b_vals) override;
+    IloNum solve(const IloNumArray &a, const IloNumArray &b) override;
 
   private:
     // Constrói o modelo base do subproblema primal
     void build_base_model();
 
     // Atualiza o lado direito das restrições que dependem de (a,b)
-    void set_constraints(const IloNumArray &a_vals, const IloNumArray &b_vals);
+    void set_constraints(const IloNumArray &a, const IloNumArray &b);
 };

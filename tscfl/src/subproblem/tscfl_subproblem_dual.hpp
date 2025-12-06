@@ -1,13 +1,12 @@
-// src/subproblem_dual.hpp
-#pragma once
-
 /*
 COS888
 
-SubproblemDual: resolve o subproblema dual do TSCFL.
+tscfl_subproblem_dual.hpp
 
 Gabriel Braun, 2025
 */
+
+#pragma once
 
 #include "tscfl_subproblem.hpp"
 
@@ -34,7 +33,7 @@ class SubproblemDual : public Subproblem
 
     // Dado (a_vals, b_vals) da solução atual do mestre, resolve o subproblema.
     // Atualiza: theta, rhs, coef_a, coef_b
-    void solve(const IloNumArray &a_vals, const IloNumArray &b_vals) override;
+    IloNum solve(const IloNumArray &a_vals, const IloNumArray &b_vals) override;
 
   private:
     // Constrói: modelo base do subproblema dual

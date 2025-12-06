@@ -16,11 +16,12 @@ class TSCFLSolverSubgradient : public TSCFLSolver
 {
   public:
     // Parâmetros do método
-    static constexpr IloInt MAX_NEW_CUTS_PER_ITER = 2;
     static constexpr IloNum EPSILON0 = 2.0;
-    static constexpr IloInt MAX_NO_IMPROV = 50;
+    static constexpr IloInt IMPROV_EPSILON = 50;
     static constexpr IloInt EXTRA_AGE = 3;
+    static constexpr IloInt MAX_NEW_CUTS = 10;
     static constexpr IloInt SOLVE_HEURISTIC_EVERY = 10;
+    static constexpr IloInt MAX_NO_IMPROV = 250;
     static constexpr IloInt PRINT_EVERY = 10;
 
   private:
@@ -28,9 +29,6 @@ class TSCFLSolverSubgradient : public TSCFLSolver
     std::unique_ptr<Subproblem> subproblem;
 
   public:
-    // Resultados adicionais
-    IloInt64 iter{ 0 };
-
     // Melhor solução primal encontrada
     IloNumArray a; // melhor a[i]
     IloNumArray b; // melhor b[j]
