@@ -1,0 +1,7 @@
+BasedOnStyle: GNU
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 100
+# AlignAfterOpenBracket: BlockIndent
+# BinPackArguments: false

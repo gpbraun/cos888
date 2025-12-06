@@ -1,0 +1,4 @@
+/home/braun/Developer/cos888/CMakeFiles/tscfl.dir
+/home/braun/Developer/cos888/CMakeFiles/tscfl_experiments.dir
+/home/braun/Developer/cos888/CMakeFiles/edit_cache.dir
+/home/braun/Developer/cos888/CMakeFiles/rebuild_cache.dir
