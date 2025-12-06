@@ -1,19 +1,16 @@
-// src/solvers/tscfl_solver_subgradient.hpp
-#pragma once
-
 /*
 COS888
 
-Resolve o TSCFL por Non-Delayed Relax-and-Cut (subgradiente).
+tscfl_solver_subgradient.hpp
 
 Gabriel Braun, 2025
 */
 
+#pragma once
+
 #include "lrp/tscfl_lrp.hpp"
 #include "solvers/tscfl_solver.hpp"
 #include "subproblem/tscfl_subproblem.hpp"
-
-ILOSTLBEGIN
 
 class TSCFLSolverSubgradient : public TSCFLSolver
 {

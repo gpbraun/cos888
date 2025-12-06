@@ -1,4 +1,11 @@
-// src/lrp/tscfl_lrp.cpp
+/*
+COS888
+
+tscfl_lrp.cpp
+
+Gabriel Braun, 2025
+*/
+
 #include "lrp/tscfl_lrp.hpp"
 
 #include <algorithm>

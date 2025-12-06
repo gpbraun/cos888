@@ -1,4 +1,11 @@
-// include/utils.hpp
+/*
+COS888
+
+tscfl_utils.hpp
+
+Gabriel Braun, 2025
+*/
+
 #pragma once
 
 #include <ilcplex/ilocplex.h>

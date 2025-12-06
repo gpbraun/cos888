@@ -1,12 +1,12 @@
-#pragma once
-
 /*
 COS888
 
-Cut genérico, FlowCoverCut, SubsetRowCut e CutManager para o TSCFL.
+tscfl_cut_manager.cpp
 
 Gabriel Braun, 2025
 */
+
+#pragma once
 
 #include <memory>
 #include <unordered_set>
@@ -14,8 +14,6 @@ Gabriel Braun, 2025
 
 #include "tscfl_instance.hpp"
 #include "tscfl_utils.hpp"
-
-ILOSTLBEGIN
 
 // =====================================================================
 //  Cut: base genérica

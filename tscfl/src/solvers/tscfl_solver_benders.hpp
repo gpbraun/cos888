@@ -1,13 +1,12 @@
-// src/tscfl_solver_benders.hpp
-#pragma once
-
 /*
 COS888
 
-Resolve o TSCFL por decomposição de Benders (callbacks CPLEX).
+tscfl_solver_benders.hpp
 
 Gabriel Braun, 2025
 */
+
+#pragma once
 
 #include <memory>
 

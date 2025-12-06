@@ -1,12 +1,15 @@
-// src/tscfl_solver_cplex.cpp
+/*
+COS888
+
+tscfl_solver_cplex.cpp
+
+Gabriel Braun, 2025
+*/
+
 #include "tscfl_solver_cplex.hpp"
 
 #include <iomanip>
 #include <iostream>
-
-// ---------------------------------------------------------------------
-//  Construtor / destrutor
-// ---------------------------------------------------------------------
 
 TSCFLSolverCplex::TSCFLSolverCplex(const TSCFLInstance &inst_)
     : TSCFLSolver(inst_),

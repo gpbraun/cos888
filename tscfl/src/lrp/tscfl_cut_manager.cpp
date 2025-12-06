@@ -1,10 +1,14 @@
-#include "lrp/tscfl_cut_manager.hpp"
+/*
+COS888
+
+tscfl_cut_manager.cpp
+
+Gabriel Braun, 2025
+*/
 
 #include <cmath>
 #include <functional>
 #include <string>
-
-ILOSTLBEGIN
 
 // =====================================================================
 //  Cut – implementação

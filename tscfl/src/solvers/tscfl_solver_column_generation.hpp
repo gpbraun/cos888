@@ -1,20 +1,17 @@
-#pragma once
-
 /*
 COS888
 
-Resolve a relaxação linear do TSCFL por geração de colunas
-(Dantzig–Wolfe por cliente).
+tscfl_solver_column_generation.hpp
 
 Gabriel Braun, 2025
 */
+
+#pragma once
 
 #include <vector>
 
 #include "subproblem/tscfl_subproblem.hpp"
 #include "tscfl_solver.hpp"
-
-ILOSTLBEGIN
 
 class TSCFLSolverColumnGeneration : public TSCFLSolver
 {

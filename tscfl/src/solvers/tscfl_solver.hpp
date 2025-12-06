@@ -1,11 +1,16 @@
-// src/tscfl_solver_base.hpp
+/*
+COS888
+
+tscfl_solver.hpp
+
+Gabriel Braun, 2025
+*/
+
 #pragma once
 
 #include <ilcplex/ilocplex.h>
 
 #include "tscfl_instance.hpp"
-
-ILOSTLBEGIN
 
 // =====================================================================
 //  BASE: TSCFLSolver

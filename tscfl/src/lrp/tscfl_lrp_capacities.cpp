@@ -1,6 +1,12 @@
-#include "lrp/tscfl_lrp_capacities.hpp"
+/*
+COS888
 
-ILOSTLBEGIN
+tscfl_lrp_capacities.cpp
+
+Gabriel Braun, 2025
+*/
+
+#include "lrp/tscfl_lrp_capacities.hpp"
 
 // ---------------------------------------------------------------------
 //  Construtor

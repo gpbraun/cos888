@@ -1,4 +1,11 @@
-// tscfl.hpp
+/*
+COS888
+
+tscfl.hpp
+
+Gabriel Braun, 2025
+*/
+
 #pragma once
 
 #include "tscfl_instance.hpp"

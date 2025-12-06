@@ -1,10 +1,16 @@
+/*
+COS888
+
+tscfl_solver_column_generation.cpp
+
+Gabriel Braun, 2025
+*/
+
 #include "solvers/tscfl_solver_column_generation.hpp"
 
 #include <chrono>
 #include <iomanip>
 #include <iostream>
-
-ILOSTLBEGIN
 
 // ---------------------------------------------------------------------
 // Construtor / Destrutor

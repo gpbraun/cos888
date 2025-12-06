@@ -1,11 +1,16 @@
-// src/solvers/tscfl_solver_subgradient.cpp
+/*
+COS888
+
+tscfl_solver_subgradient.cpp
+
+Gabriel Braun, 2025
+*/
+
 #include "solvers/tscfl_solver_subgradient.hpp"
 
 #include <chrono>
 #include <iomanip>
 #include <iostream>
-
-ILOSTLBEGIN
 
 // ---------------------------------------------------------------------
 //  Construtor

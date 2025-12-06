@@ -1,13 +1,12 @@
-// src/lrp/tscfl_lrp.hpp
-#pragma once
-
 /*
 COS888
 
-Base abstrata para relaxações Lagrangeanas do TSCFL.
+tscfl_lrp.hpp
 
 Gabriel Braun, 2025
 */
+
+#pragma once
 
 #include <memory>
 

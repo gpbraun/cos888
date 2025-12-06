@@ -1,17 +1,14 @@
-#pragma once
-
 /*
 COS888
 
-LRPBalance: relaxação Lagrangeana do TSCFL com relaxação das
-restrições de balanço (depósitos) e demanda (clientes).
+tscfl_lrp_balances.hpp
 
 Gabriel Braun, 2025
 */
 
-#include "lrp/tscfl_lrp.hpp"
+#pragma once
 
-ILOSTLBEGIN
+#include "lrp/tscfl_lrp.hpp"
 
 class LRPBalance : public LRP
 {

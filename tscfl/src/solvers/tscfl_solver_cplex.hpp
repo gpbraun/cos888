@@ -1,4 +1,11 @@
-// src/tscfl_solver_cplex.hpp
+/*
+COS888
+
+tscfl_solver_cplex.hpp
+
+Gabriel Braun, 2025
+*/
+
 #pragma once
 
 #include "tscfl_solver.hpp"

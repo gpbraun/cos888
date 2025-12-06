@@ -1,4 +1,11 @@
-// src/utils.cpp
+/*
+COS888
+
+tscfl_utils.cpp
+
+Gabriel Braun, 2025
+*/
+
 #include "tscfl_utils.hpp"
 
 IloNumMatrix::IloNumMatrix(IloEnv env, IloInt nRows, IloInt nCols)

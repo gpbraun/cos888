@@ -1,16 +1,14 @@
-#pragma once
-
 /*
 COS888
 
-Relaxação Lagrangeana do TSCFL com relaxação das restrições de capacidade.
+tscfl_lrp_capacities.hpp
 
 Gabriel Braun, 2025
 */
 
-#include "lrp/tscfl_lrp.hpp"
+#pragma once
 
-ILOSTLBEGIN
+#include "lrp/tscfl_lrp.hpp"
 
 // SOLVER DA RELAXAÇÃO LAGRANGEANA: Capacidades relaxadas
 class LRPCapacity : public LRP

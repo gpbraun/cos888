@@ -1,4 +1,11 @@
-// src/tscfl_instance.cpp
+/*
+COS888
+
+tscfl_instance.cpp
+
+Gabriel Braun, 2025
+*/
+
 #include "tscfl_instance.hpp"
 
 #include <fstream>

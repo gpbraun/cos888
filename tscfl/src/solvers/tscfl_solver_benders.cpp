@@ -1,19 +1,20 @@
-// src/tscfl_solver_benders.cpp
+/*
+COS888
+
+tscfl_solver_benders.hpp
+
+Gabriel Braun, 2025
+*/
+
 #include "tscfl_solver_benders.hpp"
 
 #include <cmath>
 #include <iomanip>
 #include <iostream>
 
-// =====================================================================
-//  CALLBACKS BENDERS (apenas neste arquivo)
-// =====================================================================
 namespace
 {
-
-// ---------------------------------------------------------------------
-//  Lazy constraints: cortes clássicos de Benders (ótimos)
-// ---------------------------------------------------------------------
+// Lazy constraints
 class LazyBendersCallbackI : public IloCplex::LazyConstraintCallbackI
 {
   protected:
@@ -60,20 +61,20 @@ class LazyBendersCallbackI : public IloCplex::LazyConstraintCallbackI
     void
     main() override
     {
-        // 1) Lê (a, b, eta) da solução corrente
+        // Lê (a, b, eta) da solução corrente
         getValues(a, var_a);
         getValues(b, var_b);
         eta = getValue(var_eta);
 
-        // 2) Resolve subproblema
+        // Resolve subproblema
         subproblem.solve(a, b);
 
-        // 3) Testa violação
+        // Testa violação
         double viol = subproblem.theta - eta;
         if (viol <= EPS)
             return;
 
-        // 4) Adiciona lazy cut
+        // Adiciona lazy cut
         add(var_eta >= subproblem.rhs + IloScalProd(subproblem.coef_a, var_a)
                            + IloScalProd(subproblem.coef_b, var_b));
     }
@@ -90,10 +91,10 @@ class UserBendersCallbackI : public IloCplex::UserCutCallbackI
     static constexpr IloNum ABS_VIOL = 1e-1;
     static constexpr IloNum REL_VIOL = 1e-4;
     static constexpr IloNum MAX_FRAC_SUM = 10.0;
-    static constexpr IloInt MAX_CUTS_PER_NODE = 1;
-    static constexpr IloInt MAX_NODE_INDEX_USER_CUTS = 10;
-    static constexpr IloNum COREPOINT_LAMBDA = 0.5;
-    static constexpr IloNum SEPPOINT_LAMBDA = 0.5;
+    static constexpr IloInt MAX_NODE_CUTS = 1;
+    static constexpr IloInt MAX_NODE_INDEX = 10;
+    static constexpr IloNum OMEGA_CORE = 0.5;
+    static constexpr IloNum OMEGA_SET = 0.5;
 
   protected:
     IloEnv &env;
@@ -161,7 +162,7 @@ class UserBendersCallbackI : public IloCplex::UserCutCallbackI
 
         // Limita user cuts a nós "rasos"
         IloInt64 nodeIndex = getNnodes64();
-        if (getMIPRelativeGap() <= MAX_GAP && nodeIndex > MAX_NODE_INDEX_USER_CUTS)
+        if (getMIPRelativeGap() <= MAX_GAP && nodeIndex > MAX_NODE_INDEX)
             return;
 
         // Controle de cortes por nó
@@ -170,7 +171,7 @@ class UserBendersCallbackI : public IloCplex::UserCutCallbackI
                 lastNodeIndex = nodeIndex;
                 cutsThisNode = 0;
             }
-        if (cutsThisNode >= MAX_CUTS_PER_NODE)
+        if (cutsThisNode >= MAX_NODE_CUTS)
             return;
 
         // Lê (a, b, eta) da solução corrente
@@ -202,9 +203,9 @@ class UserBendersCallbackI : public IloCplex::UserCutCallbackI
         if (core_initialized)
             {
                 for (int i = 0; i < inst.nI; ++i)
-                    a_core[i] = (1.0 - COREPOINT_LAMBDA) * a_core[i] + COREPOINT_LAMBDA * a[i];
+                    a_core[i] = (1.0 - OMEGA_CORE) * a_core[i] + OMEGA_CORE * a[i];
                 for (int j = 0; j < inst.nJ; ++j)
-                    b_core[j] = (1.0 - COREPOINT_LAMBDA) * b_core[j] + COREPOINT_LAMBDA * b[j];
+                    b_core[j] = (1.0 - OMEGA_CORE) * b_core[j] + OMEGA_CORE * b[j];
             }
         else
             {
@@ -212,14 +213,15 @@ class UserBendersCallbackI : public IloCplex::UserCutCallbackI
                     a_core[i] = a[i];
                 for (int j = 0; j < inst.nJ; ++j)
                     b_core[j] = b[j];
+
                 core_initialized = IloTrue;
             }
 
         // Ponto de separação
         for (int i = 0; i < inst.nI; ++i)
-            a_sep[i] = SEPPOINT_LAMBDA * a[i] + (1.0 - SEPPOINT_LAMBDA) * a_core[i];
+            a_sep[i] = OMEGA_SET * a[i] + (1.0 - OMEGA_SET) * a_core[i];
         for (int j = 0; j < inst.nJ; ++j)
-            b_sep[j] = SEPPOINT_LAMBDA * b[j] + (1.0 - SEPPOINT_LAMBDA) * b_core[j];
+            b_sep[j] = OMEGA_SET * b[j] + (1.0 - OMEGA_SET) * b_core[j];
 
         // Resolve subproblema no ponto de separação
         subproblem.solve(a_sep, b_sep);
@@ -281,9 +283,10 @@ TSCFLSolverBenders::build_model()
     model.add(IloScalProd(inst.p, var_a) >= demand_sum);
     model.add(IloScalProd(inst.q, var_b) >= demand_sum);
 
-    // OBJETIVO: custo fixo + eta
+    // OBJETIVO
     IloObjective obj
         = IloMinimize(env, IloScalProd(inst.f, var_a) + IloScalProd(inst.g, var_b) + var_eta);
+
     model.add(obj);
 }
 
