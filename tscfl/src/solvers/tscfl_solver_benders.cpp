@@ -8,25 +8,22 @@ Gabriel Braun, 2025
 
 #include "tscfl_solver_benders.hpp"
 
-#include <cmath>
 #include <iomanip>
 #include <iostream>
 
 namespace
 {
-// Lazy constraints
+// CUTS: Lazy
 class LazyBendersCallbackI : public IloCplex::LazyConstraintCallbackI
 {
-  protected:
-    IloEnv &env;
-    const TSCFLInstance &inst;
-
   private:
+    const IloEnv &env;
+    const TSCFLInstance &inst;
     Subproblem &subproblem;
 
-    IloBoolVarArray &var_a;
-    IloBoolVarArray &var_b;
-    IloNumVar &var_eta;
+    const IloBoolVarArray &var_a;
+    const IloBoolVarArray &var_b;
+    const IloNumVar &var_eta;
 
     IloNumArray a;
     IloNumArray b;
@@ -36,9 +33,9 @@ class LazyBendersCallbackI : public IloCplex::LazyConstraintCallbackI
     LazyBendersCallbackI(
         const TSCFLInstance &inst_,
         Subproblem &subproblem_,
-        IloBoolVarArray &var_a_,
-        IloBoolVarArray &var_b_,
-        IloNumVar &var_eta_
+        const IloBoolVarArray &var_a_,
+        const IloBoolVarArray &var_b_,
+        const IloNumVar &var_eta_
     )
         : IloCplex::LazyConstraintCallbackI(inst_.env),
           env(inst_.env),
@@ -70,7 +67,7 @@ class LazyBendersCallbackI : public IloCplex::LazyConstraintCallbackI
         subproblem.solve(a, b);
 
         // Testa violação
-        double viol = subproblem.theta - eta;
+        IloNum viol = subproblem.theta - eta;
         if (viol <= EPS)
             return;
 
@@ -80,9 +77,7 @@ class LazyBendersCallbackI : public IloCplex::LazyConstraintCallbackI
     }
 };
 
-// ---------------------------------------------------------------------
-//  User cuts: Magnanti-Wong + heurísticas
-// ---------------------------------------------------------------------
+// CUTS: User
 class UserBendersCallbackI : public IloCplex::UserCutCallbackI
 {
   public:
@@ -96,23 +91,18 @@ class UserBendersCallbackI : public IloCplex::UserCutCallbackI
     static constexpr IloNum OMEGA_CORE = 0.5;
     static constexpr IloNum OMEGA_SET = 0.5;
 
-  protected:
-    IloEnv &env;
-    const TSCFLInstance &inst;
-
   private:
-    IloBoolVarArray &var_a;
-    IloBoolVarArray &var_b;
-    IloNumVar &var_eta;
+    const IloEnv &env;
+    const TSCFLInstance &inst;
     Subproblem &subproblem;
+
+    const IloBoolVarArray &var_a;
+    const IloBoolVarArray &var_b;
+    const IloNumVar &var_eta;
 
     IloNumArray a;
     IloNumArray b;
     IloNum eta{ 0.0 };
-
-    // Controle de cortes por nó
-    IloInt64 lastNodeIndex;
-    int cutsThisNode;
 
     // Core point e ponto de separação
     IloNumArray a_core;
@@ -121,13 +111,17 @@ class UserBendersCallbackI : public IloCplex::UserCutCallbackI
     IloNumArray b_sep;
     IloBool core_initialized{ IloFalse };
 
+    // Controle de cortes por nó
+    IloInt cuts_this_node{ 0 };
+    IloInt64 last_node_index{ -1 };
+
   public:
     UserBendersCallbackI(
         const TSCFLInstance &inst_,
         Subproblem &subproblem_,
-        IloBoolVarArray &var_a_,
-        IloBoolVarArray &var_b_,
-        IloNumVar &var_eta_
+        const IloBoolVarArray &var_a_,
+        const IloBoolVarArray &var_b_,
+        const IloNumVar &var_eta_
     )
         : IloCplex::UserCutCallbackI(inst_.env),
           env(inst_.env),
@@ -138,8 +132,6 @@ class UserBendersCallbackI : public IloCplex::UserCutCallbackI
           subproblem(subproblem_),
           a(env, inst_.nI),
           b(env, inst_.nJ),
-          lastNodeIndex(-1),
-          cutsThisNode(0),
           a_core(env, inst_.nI),
           b_core(env, inst_.nJ),
           a_sep(env, inst_.nI),
@@ -166,12 +158,12 @@ class UserBendersCallbackI : public IloCplex::UserCutCallbackI
             return;
 
         // Controle de cortes por nó
-        if (nodeIndex != lastNodeIndex)
+        if (nodeIndex != last_node_index)
             {
-                lastNodeIndex = nodeIndex;
-                cutsThisNode = 0;
+                last_node_index = nodeIndex;
+                cuts_this_node = 0;
             }
-        if (cutsThisNode >= MAX_NODE_CUTS)
+        if (cuts_this_node >= MAX_NODE_CUTS)
             return;
 
         // Lê (a, b, eta) da solução corrente
@@ -180,20 +172,20 @@ class UserBendersCallbackI : public IloCplex::UserCutCallbackI
         eta = getValue(var_eta);
 
         // Evita cortes para soluções muito fracionárias
-        double frac_sum = 0.0;
+        IloNum frac_sum = 0.0;
 
         for (int i = 0; i < inst.nI; ++i)
             {
-                double v = a[i];
-                double frac = IloAbs(v - std::round(v));
+                IloNum v = a[i];
+                IloNum frac = IloAbs(v - IloRound(v));
                 frac_sum += IloMin(frac, 1.0 - frac);
                 if (frac_sum > MAX_FRAC_SUM)
                     return;
             }
         for (int j = 0; j < inst.nJ; ++j)
             {
-                double v = b[j];
-                double frac = IloAbs(v - std::round(v));
+                IloNum v = b[j];
+                IloNum frac = IloAbs(v - IloRound(v));
                 frac_sum += IloMin(frac, 1.0 - frac);
                 if (frac_sum > MAX_FRAC_SUM)
                     return;
@@ -227,29 +219,31 @@ class UserBendersCallbackI : public IloCplex::UserCutCallbackI
         subproblem.solve(a_sep, b_sep);
 
         // Teste de violação avaliado na solução LP
-        double theta = subproblem.theta;
-        double viol = theta - eta;
+        IloNum theta = subproblem.theta;
+        IloNum viol = theta - eta;
 
-        double min_viol = IloMax(ABS_VIOL, REL_VIOL * IloMax(1.0, IloAbs(theta)));
+        IloNum min_viol = IloMax(ABS_VIOL, REL_VIOL * IloMax(1.0, IloAbs(theta)));
         if (viol <= min_viol)
             return;
 
         // Adiciona user cut
+        IloCplex::CutManagement cut_mgmt
+            = (nodeIndex == 0) ? IloCplex::UseCutForce : IloCplex::UseCutPurge;
+
         add(var_eta >= subproblem.rhs + IloScalProd(subproblem.coef_a, var_a)
                            + IloScalProd(subproblem.coef_b, var_b),
-            nodeIndex == 0 ? IloCplex::UseCutForce : IloCplex::UseCutPurge);
+            cut_mgmt);
 
-        ++cutsThisNode;
+        ++cuts_this_node;
     }
 };
-
 } // namespace
 
-TSCFLSolverBenders::TSCFLSolverBenders(const TSCFLInstance &inst_, Subproblem::Mode smode)
+TSCFLSolverBenders::TSCFLSolverBenders(const TSCFLInstance &inst_, Subproblem::Mode sp_mode)
     : TSCFLSolver(inst_),
       model(env),
       cplex(env),
-      subproblem(Subproblem::create(inst_, smode)),
+      subproblem(Subproblem::create(inst_, sp_mode)),
       var_a(env, inst.nI),
       var_b(env, inst.nJ),
       var_eta(env, 0.0, IloInfinity)

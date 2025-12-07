@@ -8,7 +8,6 @@ Gabriel Braun, 2025
 
 #include "solvers/tscfl_solver_column_generation.hpp"
 
-#include <chrono>
 #include <iomanip>
 #include <iostream>
 
@@ -64,17 +63,11 @@ TSCFLSolverColumnGeneration::~TSCFLSolverColumnGeneration()
     model.end();
 }
 
-// ---------------------------------------------------------------------
-// Construção do modelo mestre restrito inicial (RMP)
-// ---------------------------------------------------------------------
-
 void
 TSCFLSolverColumnGeneration::build_initial_model()
 {
-    // -------------------------------------------------------------
-    // 1) Restrições de capacidade das plantas: constr_l1[i]
-    //     -p_i a_i + sum_{k,t: col_info[k][t].i = i} r_k z_{k,t} <= 0
-    // -------------------------------------------------------------
+    // RESTRIÇÕES DO RMP
+    // Restrições de capacidade das plantas: constr_l1[i]
     for (IloInt i = 0; i < inst.nI; ++i)
         {
             IloExpr e(env);
@@ -84,10 +77,7 @@ TSCFLSolverColumnGeneration::build_initial_model()
             e.end();
         }
 
-    // -------------------------------------------------------------
-    // 2) Restrições de capacidade dos depósitos: constr_l2[j]
-    //     -q_j b_j + sum_{k,t: col_info[k][t].j = j} r_k z_{k,t} <= 0
-    // -------------------------------------------------------------
+    // Restrições de capacidade dos depósitos: constr_l2[j]
     for (IloInt j = 0; j < inst.nJ; ++j)
         {
             IloExpr e(env);
@@ -97,10 +87,7 @@ TSCFLSolverColumnGeneration::build_initial_model()
             e.end();
         }
 
-    // -------------------------------------------------------------
-    // 3) Restrições de convexidade/demanda por cliente: constr_m2[k]
-    //     sum_t z_{k,t} = 1
-    // -------------------------------------------------------------
+    // Restrições de convexidade/demanda por cliente: constr_m2[k]
     for (IloInt k = 0; k < inst.nK; ++k)
         {
             IloExpr e(env);
@@ -109,13 +96,7 @@ TSCFLSolverColumnGeneration::build_initial_model()
             e.end();
         }
 
-    // -------------------------------------------------------------
-    // 4) Restrição de vínculo: z_{k,t} <= b_j  (para par (j,k))
-    //
-    // Implementada como:
-    //     -b_j + sum_{t: col_info[k][t].j = j} z_{k,t} <= 0
-    // (os coeficientes de z são adicionados quando criamos colunas)
-    // -------------------------------------------------------------
+    // Restrição de vínculo: z_{k,t} <= b_j  (para par (j,k))
     for (IloInt j = 0; j < inst.nJ; ++j)
         {
             for (IloInt k = 0; k < inst.nK; ++k)
@@ -128,99 +109,71 @@ TSCFLSolverColumnGeneration::build_initial_model()
                 }
         }
 
-    // -------------------------------------------------------------
-    // 5) Objetivo: f^T a + g^T b + sum_{k,t} cost_{k,it} z_{k,t}
-    //    (parte dos z é construída nas colunas)
-    // -------------------------------------------------------------
+    // FUNÇÃO OBJETIVO
     obj = IloMinimize(env, IloScalProd(inst.f, var_a) + IloScalProd(inst.g, var_b));
     model.add(obj);
 
-    // -------------------------------------------------------------
-    // 6) Construção das colunas iniciais
-    //    - Geramos um fluxo capacidade-viável "flow[i][j][k]"
-    //      por um esquema guloso simples.
-    // -------------------------------------------------------------
+    // CONSTRUÇÃO DAS COLUNAS INICIAIS
     IloNumTensor flow(env, inst.nI, inst.nJ, inst.nK);
     IloNumArray p_remaining = inst.p.copy();
     IloNumArray q_remaining = inst.q.copy();
     IloNumArray r_remaining = inst.r.copy();
 
     for (IloInt k = 0; k < inst.nK; ++k)
-        {
-            while (r_remaining[k] > EPS)
-                {
-                    IloInt best_i = -1;
-                    IloInt best_j = -1;
-                    IloNum best_cost = IloInfinity;
+        while (r_remaining[k] > EPS)
+            {
+                IloInt best_i = -1;
+                IloInt best_j = -1;
+                IloNum best_cost = IloInfinity;
 
-                    // Escolhe par (i,j) viável com menor custo c_ij + d_jk
-                    for (IloInt i = 0; i < inst.nI; ++i)
-                        {
-                            if (p_remaining[i] <= EPS)
-                                continue;
+                // Escolhe par (i,j) viável com menor custo c_ij + d_jk
+                for (IloInt i = 0; i < inst.nI; ++i)
+                    {
+                        if (p_remaining[i] <= EPS)
+                            continue;
 
-                            for (IloInt j = 0; j < inst.nJ; ++j)
-                                {
-                                    if (q_remaining[j] <= EPS)
-                                        continue;
+                        for (IloInt j = 0; j < inst.nJ; ++j)
+                            {
+                                if (q_remaining[j] <= EPS)
+                                    continue;
 
-                                    IloNum c_ij = inst.c[i][j] + inst.d[j][k];
-                                    if (c_ij < best_cost)
-                                        {
-                                            best_cost = c_ij;
-                                            best_i = i;
-                                            best_j = j;
-                                        }
-                                }
-                        }
-                    // Sem capacidade total suficiente: aborta distribuição restante
-                    if (best_i < 0 || best_j < 0)
-                        {
-                            break;
-                        }
+                                IloNum c_ij = inst.c[i][j] + inst.d[j][k];
+                                if (c_ij < best_cost)
+                                    {
+                                        best_cost = c_ij;
+                                        best_i = i;
+                                        best_j = j;
+                                    }
+                            }
+                    }
+                // Sem capacidade total suficiente: aborta distribuição restante
+                if (best_i < 0 || best_j < 0)
+                    break;
 
-                    IloNum delta
-                        = IloMin(r_remaining[k], IloMin(p_remaining[best_i], q_remaining[best_j]));
+                IloNum delta
+                    = IloMin(r_remaining[k], IloMin(p_remaining[best_i], q_remaining[best_j]));
 
-                    if (delta <= EPS)
-                        break;
+                if (delta <= EPS)
+                    break;
 
-                    flow[best_i][best_j][k] += delta;
-                    p_remaining[best_i] -= delta;
-                    q_remaining[best_j] -= delta;
-                    r_remaining[k] -= delta;
-                }
-        }
+                flow[best_i][best_j][k] += delta;
+                p_remaining[best_i] -= delta;
+                q_remaining[best_j] -= delta;
+                r_remaining[k] -= delta;
+            }
 
     // Criar colunas iniciais z[k][t] a partir de flow[i][j][k]
     for (IloInt k = 0; k < inst.nK; ++k)
-        {
-            for (IloInt i = 0; i < inst.nI; ++i)
+        for (IloInt i = 0; i < inst.nI; ++i)
+            for (IloInt j = 0; j < inst.nJ; ++j)
                 {
-                    for (IloInt j = 0; j < inst.nJ; ++j)
-                        {
-                            if (flow[i][j][k] > EPS)
-                                {
-                                    add_column_for_client(
-                                        static_cast<int>(k),
-                                        static_cast<int>(i),
-                                        static_cast<int>(j)
-                                    );
-                                }
-                        }
+                    if (flow[i][j][k] > EPS)
+                        add_column_for_client(k, i, j);
+                    // Fallback:
+                    if (z[k].getSize() == 0)
+                        add_column_for_client(k, 0, 0);
                 }
-
-            // Segurança: se nenhum padrão foi gerado para k, cria um "dummy"
-            if (z[k].getSize() == 0)
-                {
-                    add_column_for_client(static_cast<int>(k), 0, 0);
-                }
-        }
 }
-
-// ---------------------------------------------------------------------
-// Adiciona uma coluna (padrão) para o cliente k correspondente ao par (i,j)
-// ---------------------------------------------------------------------
 
 void
 TSCFLSolverColumnGeneration::add_column_for_client(int k, int i, int j)
@@ -251,10 +204,6 @@ TSCFLSolverColumnGeneration::add_column_for_client(int k, int i, int j)
     model.add(z_var);
 }
 
-// ---------------------------------------------------------------------
-// Número total de colunas z[k][t]
-// ---------------------------------------------------------------------
-
 IloInt
 TSCFLSolverColumnGeneration::get_num_columns() const
 {
@@ -266,25 +215,16 @@ TSCFLSolverColumnGeneration::get_num_columns() const
     return total;
 }
 
-// ---------------------------------------------------------------------
-// Método principal de geração de colunas
-// ---------------------------------------------------------------------
-
 bool
 TSCFLSolverColumnGeneration::solve(bool log_output, IloNum time_limit)
 {
     auto &SP = *subproblem;
 
-    IloNumArray a_lr(env, inst.nI);
-    IloNumArray b_lr(env, inst.nJ);
-    IloNumArray a_h(env, inst.nI);
-    IloNumArray b_h(env, inst.nJ);
+    IloNumArray a_h(env, inst.nI), b_h(env, inst.nJ);
+    IloNumArray l1(env, inst.nI), l2(env, inst.nJ), m2(env, inst.nK);
+    IloNumMatrix v(env, inst.nJ, inst.nK);
 
-    IloNumArray l1(env, inst.nI);
-    IloNumArray l2(env, inst.nJ);
-    IloNumArray m2(env, inst.nK);
-    IloNumMatrix m1(env, inst.nJ, inst.nK);
-
+    // Log inicial
     if (log_output)
         {
             std::cout << "\n\n[CG] Iniciando Geração de Colunas\n\n"
@@ -310,28 +250,23 @@ TSCFLSolverColumnGeneration::solve(bool log_output, IloNum time_limit)
                       << std::defaultfloat;
         }
 
-    auto t0 = std::chrono::steady_clock::now();
+    IloTimer timer(env);
+    timer.start();
 
     while (true)
         {
-            // ---------------------------------------------------------
-            // Controle de tempo
-            // ---------------------------------------------------------
-            auto t1 = std::chrono::steady_clock::now();
-            IloNum elapsed = std::chrono::duration<IloNum>(t1 - t0).count();
+            // Critério de parada: tempo
+            time = timer.getTime();
 
             if (time_limit > 0.0)
                 {
-                    if (elapsed >= time_limit)
-                        {
-                            break;
-                        }
-                    cplex.setParam(IloCplex::Param::TimeLimit, time_limit - elapsed);
+                    if (time >= time_limit)
+                        break;
+
+                    cplex.setParam(IloCplex::Param::TimeLimit, time_limit - time);
                 }
 
-            // ---------------------------------------------------------
             // Resolve o RMP atual
-            // ---------------------------------------------------------
             if (!cplex.solve())
                 {
                     status = cplex.getStatus();
@@ -342,13 +277,8 @@ TSCFLSolverColumnGeneration::solve(bool log_output, IloNum time_limit)
             status = cplex.getStatus();
             lb = cplex.getObjValue();
 
-            // ---------------------------------------------------------
-            // Heurística primal: a partir de (a,b) fracionários do RMP
-            // ---------------------------------------------------------
-            cplex.getValues(var_a, a_lr);
-            cplex.getValues(var_b, b_lr);
-
-            SP.solve_primal_heuristic(a_lr, b_lr, a_h, b_h);
+            // Heurística primal a partir de (a,b) fracionários do RMP
+            SP.solve_primal_heuristic(cplex, var_a, var_b, a_h, b_h);
 
             if (SP.opt + EPS < ub)
                 {
@@ -359,28 +289,15 @@ TSCFLSolverColumnGeneration::solve(bool log_output, IloNum time_limit)
 
             update_gap();
 
-            // ---------------------------------------------------------
-            // Recupera duais para fazer pricing
-            // ---------------------------------------------------------
+            // Recuperação das variáveis duais
             cplex.getDuals(l1, constr_l1);
             cplex.getDuals(l2, constr_l2);
             cplex.getDuals(m2, constr_m2);
             for (IloInt j = 0; j < inst.nJ; ++j)
-                {
-                    cplex.getDuals(m1[j], constrs_v[j]);
-                }
+                cplex.getDuals(v[j], constrs_v[j]);
 
-            // ---------------------------------------------------------
-            // Pricing por cliente k:
-            // Procurar (i,j) com custo reduzido negativo mais violado.
-            //
-            // rc_{k,ij} =
-            //   r_k (c_ij + d_jk) - r_k(l1_i + l2_j) - m2_k - m1_{j,k}
-            //
-            // Se rc < 0, coluna entra.
-            // ---------------------------------------------------------
+            // Pricing por cliente k
             bool any_new = false;
-
             for (IloInt k = 0; k < inst.nK; ++k)
                 {
                     const IloNum rk = inst.r[k];
@@ -390,35 +307,27 @@ TSCFLSolverColumnGeneration::solve(bool log_output, IloNum time_limit)
                     IloInt best_j = -1;
 
                     for (IloInt i = 0; i < inst.nI; ++i)
-                        {
-                            for (IloInt j = 0; j < inst.nJ; ++j)
-                                {
-                                    IloNum rc = rk * (inst.c[i][j] + inst.d[j][k])
-                                                - rk * (l1[i] + l2[j]) - m2[k] - m1[j][k];
+                        for (IloInt j = 0; j < inst.nJ; ++j)
+                            {
+                                IloNum rc = rk * (inst.c[i][j] + inst.d[j][k] - l1[i] - l2[j])
+                                            - m2[k] - v[j][k];
 
-                                    if (rc < best_rc - EPS)
-                                        {
-                                            best_rc = rc;
-                                            best_i = i;
-                                            best_j = j;
-                                        }
-                                }
-                        }
+                                if (rc < best_rc - EPS)
+                                    {
+                                        best_rc = rc;
+                                        best_i = i;
+                                        best_j = j;
+                                    }
+                            }
 
                     if (best_i != -1)
                         {
-                            add_column_for_client(
-                                static_cast<int>(k),
-                                static_cast<int>(best_i),
-                                static_cast<int>(best_j)
-                            );
+                            add_column_for_client(k, best_i, best_j);
                             any_new = true;
                         }
                 }
 
-            // ---------------------------------------------------------
-            // Log
-            // ---------------------------------------------------------
+            // Log parcial
             if (log_output && (iter % PRINT_EVERY == 0 || !any_new))
                 {
                     IloInt num_columns = get_num_columns();
@@ -427,7 +336,7 @@ TSCFLSolverColumnGeneration::solve(bool log_output, IloNum time_limit)
                               << iter
                               //
                               << std::fixed << std::setprecision(1) << std::setw(10)
-                              << elapsed
+                              << time
                               //
                               << std::setprecision(0) << std::setw(15)
                               << lb
@@ -445,9 +354,7 @@ TSCFLSolverColumnGeneration::solve(bool log_output, IloNum time_limit)
                               << std::defaultfloat;
                 }
 
-            // ---------------------------------------------------------
             // Critério de parada: nenhuma coluna com rc < 0
-            // ---------------------------------------------------------
             if (!any_new)
                 {
                     status = IloAlgorithm::Optimal;
@@ -457,8 +364,7 @@ TSCFLSolverColumnGeneration::solve(bool log_output, IloNum time_limit)
             ++iter;
         }
 
-    auto t_end = std::chrono::steady_clock::now();
-    time = std::chrono::duration<IloNum>(t_end - t0).count();
+    timer.stop();
 
     // Log final
     print_summary("GERAÇÃO DE COLUNAS");

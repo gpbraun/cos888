@@ -29,10 +29,10 @@ class TSCFLSolverColumnGeneration : public TSCFLSolver
     IloNumVarArray var_b; // b[j]
 
     // Restrições
-    IloRangeArray constr_l1;           // capacidade plantas: i
-    IloRangeArray constr_l2;           // capacidade depósitos: j
-    IloRangeArray constr_m2;           // convexidade/demanda: k
-    IloArray<IloRangeArray> constrs_v; // vínculo b_j >= z_{j,k}: (j,k)
+    IloRangeArray constr_l1;
+    IloRangeArray constr_l2;
+    IloRangeArray constr_m2;
+    IloArray<IloRangeArray> constrs_v;
 
     IloObjective obj;
 

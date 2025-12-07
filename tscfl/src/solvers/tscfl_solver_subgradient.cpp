@@ -26,19 +26,18 @@ TSCFLSolverSubgradient::TSCFLSolverSubgradient(
 bool
 TSCFLSolverSubgradient::solve(bool log_output, IloNum time_limit)
 {
-    IloInt last_improv_iter = 0;
-    IloInt last_eps_update_iter = 0;
-
-    IloNum epsilon = EPSILON0;
-
-    auto t0 = std::chrono::steady_clock::now();
-
     auto &SP = *subproblem;
     auto &LR = *relaxation;
     auto &cuts = LR.getCuts();
 
     IloNumArray a_h(env, inst.nI), b_h(env, inst.nJ);
 
+    IloInt last_improv_iter = 0;
+    IloInt last_eps_update_iter = 0;
+
+    IloNum epsilon = EPSILON0;
+
+    // Log inicial
     if (log_output)
         {
             std::cout << "\n\n[SG] Iniciando Subgradiente\n\n"
@@ -84,15 +83,18 @@ TSCFLSolverSubgradient::solve(bool log_output, IloNum time_limit)
                       << std::defaultfloat;
         }
 
+    IloTimer timer(env);
+    timer.start();
+
     while (true)
         {
-            // Controle de tempo
-            auto t1 = std::chrono::steady_clock::now();
-            IloNum elapsed = std::chrono::duration<IloNum>(t1 - t0).count();
-            if (time_limit > 0.0 && elapsed >= time_limit)
+            // Critério de parada: tempo
+            time = timer.getTime();
+
+            if (time_limit > 0.0 && time >= time_limit)
                 break;
 
-            // Resolve subproblema Lagrangeano
+            // Resolve o subproblema Lagrangeano
             LR.solve();
 
             if (LR.opt > lb + EPS)
@@ -128,10 +130,10 @@ TSCFLSolverSubgradient::solve(bool log_output, IloNum time_limit)
 
             update_gap();
 
-            // Critério de parada por iterações sem melhora
+            // Critério de parada: iterações sem melhora
             if (iter - last_improv_iter >= MAX_NO_IMPROV)
                 break;
-            // Critério de parada por gap
+            // Critério de parada: gap
             if (status == IloAlgorithm::Optimal)
                 break;
 
@@ -166,7 +168,7 @@ TSCFLSolverSubgradient::solve(bool log_output, IloNum time_limit)
                               << (iter - last_improv_iter)
                               //
                               << std::fixed << std::setprecision(1) << std::setw(10)
-                              << elapsed
+                              << time
                               //
                               << std::fixed << std::setprecision(0) << std::setw(15)
                               << LR.opt
@@ -202,8 +204,7 @@ TSCFLSolverSubgradient::solve(bool log_output, IloNum time_limit)
             ++iter;
         }
 
-    auto t_end = std::chrono::steady_clock::now();
-    time = std::chrono::duration<IloNum>(t_end - t0).count();
+    timer.stop();
 
     // Log final
     print_summary("SUBGRADIENTE");

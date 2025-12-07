@@ -14,8 +14,6 @@ Gabriel Braun, 2025
 #include "tscfl_solver.hpp"
 #include "tscfl_utils.hpp"
 
-ILOSTLBEGIN
-
 // SOLVER TSCFL: Decomposição de Benders
 class TSCFLSolverBenders : public TSCFLSolver
 {
