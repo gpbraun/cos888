@@ -12,7 +12,7 @@ Gabriel Braun, 2025
 
 #include "tscfl_instance.hpp"
 
-// SOLVER TSCFL
+// SOLVER
 class TSCFLSolver
 {
   protected:
@@ -20,15 +20,16 @@ class TSCFLSolver
     const TSCFLInstance &inst;
 
   public:
-    // Resultados
-    IloNumArray a;     // a[i]
-    IloNumArray b;     // b[j]
-    IloNumVarMatrix x; // x[i][j]
-    IloNumVarMatrix y; // y[j][k]
+    // Saída
+    IloNumArray a;  // a[i]
+    IloNumArray b;  // b[j]
+    IloNumMatrix x; // x[i][j]
+    IloNumMatrix y; // y[j][k]
 
-    // Estatísticas
     IloNum lb{ 0.0 };
     IloNum ub{ IloInfinity };
+
+    // Estatísticas
     IloNum gap{ IloInfinity };
     IloNum time{ 0.0 };
     IloInt64 iter{ 0 };
@@ -43,9 +44,16 @@ class TSCFLSolver
     virtual void solve(bool log_output = true, double time_limit = -1.0) = 0;
 
   protected:
-    // Atualiza: gap (a partir de lb/ub) e status
+    // Imprime: resumo padronizado.
+    void printSummary(const char *tag) const;
+
+    // Atualiza: gap (a partir de lb/ub) e status.
     void updateGap();
 
-    // Imprime: resumo padronizado
-    void printSummary(const char *tag) const;
+    // Atualiza: x e y a partir das variáveis do CPLEX.
+    void
+    updateFlows(const IloCplex &cplex, const IloNumVarMatrix &var_x, const IloNumVarMatrix &var_y);
+
+    // Atualiza: x e y a partir dos valores de a e b usando o subproblema primal
+    void updateFlows();
 };

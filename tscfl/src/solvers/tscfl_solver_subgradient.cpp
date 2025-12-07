@@ -28,8 +28,6 @@ TSCFLSolverSubgradient::solve(bool log_output, IloNum time_limit)
     auto &LR = *relaxation;
     auto &cuts = LR.getCuts();
 
-    IloNumArray a_h(env, inst.nI), b_h(env, inst.nJ);
-
     IloInt last_improv_iter = 0;
     IloInt last_eps_update_iter = 0;
 
@@ -38,47 +36,24 @@ TSCFLSolverSubgradient::solve(bool log_output, IloNum time_limit)
     // Log inicial
     if (log_output)
         {
+            // clang-format off
             std::cout << "\n\n[SG] Iniciando Subgradiente\n\n"
-                      //
-                      << std::right << std::setw(5)
-                      << "iter"
-                      //
-                      << std::setw(10)
-                      << "n.imprv."
-                      //
-                      << std::setw(10)
-                      << "time(s)"
-                      //
-                      << std::setw(15)
-                      << "opt_LR"
-                      //
-                      << std::setw(15)
-                      << "LB"
-                      //
-                      << std::setw(15)
-                      << "UB"
-                      //
-                      << std::setw(12)
-                      << "gap"
-                      //
-                      << std::setw(12)
-                      << "step"
-                      //
-                      << std::setw(12)
-                      << "||g||^2"
-                      //
-                      << std::setw(10)
-                      << "|CA|"
-                      //
-                      << std::setw(10)
-                      << "|PA|"
-                      //
-                      << std::setw(10)
-                      << "|CI|"
-                      //
-                      << "\n"
-                      << std::string(140, '-') << "\n"
+                      << std::right
+                      << std::setw(5)  << "iter"
+                      << std::setw(10) << "n.imprv."
+                      << std::setw(10) << "time(s)"
+                      << std::setw(15) << "opt_LR"
+                      << std::setw(15) << "LB"
+                      << std::setw(15) << "UB"
+                      << std::setw(12) << "gap"
+                      << std::setw(12) << "step"
+                      << std::setw(12) << "||g||^2"
+                      << std::setw(10) << "|CA|"
+                      << std::setw(10) << "|PA|"
+                      << std::setw(10) << "|CI|"
+                      << "\n" << std::string(140, '-') << "\n"
                       << std::defaultfloat;
+            // clang-format on
         }
 
     IloTimer timer(env);
@@ -116,13 +91,14 @@ TSCFLSolverSubgradient::solve(bool log_output, IloNum time_limit)
             // Heurística primal
             if (iter == 0 || (last_improv_iter == iter) || (iter % SOLVE_HEURISTIC_EVERY == 0))
                 {
-                    SP.solveHeuristic(LR.a, LR.b, a_h, b_h);
+                    SP.update(LR.a, LR.b, true);
+                    SP.solve();
 
                     if (SP.opt + EPS < ub)
                         {
                             ub = SP.opt;
-                            a = a_h;
-                            b = b_h;
+                            a = SP.a.copy();
+                            b = SP.b.copy();
                         }
                 }
 
@@ -158,51 +134,35 @@ TSCFLSolverSubgradient::solve(bool log_output, IloNum time_limit)
                     IloInt nCA = cuts.count(Cut::Status::CA);
                     IloInt nPA = cuts.count(Cut::Status::PA);
                     IloInt nCI = cuts.count(Cut::Status::CI);
-
-                    std::cout << std::right << std::setw(5)
-                              << iter
-                              //
-                              << std::setw(10)
-                              << (iter - last_improv_iter)
-                              //
-                              << std::fixed << std::setprecision(1) << std::setw(10)
-                              << time
-                              //
-                              << std::fixed << std::setprecision(0) << std::setw(15)
-                              << LR.opt
-                              //
-                              << std::setw(15)
-                              << lb
-                              //
-                              << std::setw(15)
-                              << ub
-                              //
-                              << std::scientific << std::setprecision(2) << std::setw(12)
-                              << gap
-                              //
-                              << std::setw(12)
-                              << step
-                              //
-                              << std::setw(12)
-                              << norm2
-                              //
-                              << std::fixed << std::setw(10)
-                              << nCA
-                              //
-                              << std::setw(10)
-                              << nPA
-                              //
-                              << std::setw(10)
-                              << nCI
-                              //
+                    // clang-format off
+                    std::cout << std::right
+                              << std::setw(5) << iter
+                              << std::setw(10) << (iter - last_improv_iter)
+                              << std::fixed << std::setprecision(1)
+                              << std::setw(10) << time
+                              << std::fixed << std::setprecision(0)
+                              << std::setw(15) << LR.opt
+                              << std::setw(15) << lb
+                              << std::setw(15) << ub
+                              << std::scientific << std::setprecision(2)
+                              << std::setw(12) << gap
+                              << std::setw(12) << step
+                              << std::setw(12) << norm2
+                              << std::fixed
+                              << std::setw(10) << nCA
+                              << std::setw(10) << nPA
+                              << std::setw(10) << nCI
                               << "\n"
                               << std::defaultfloat;
+                    // clang-format on
                 }
 
             ++iter;
         }
 
     timer.stop();
+
+    updateFlows();
 
     // Log final
     printSummary("SUBGRADIENTE");

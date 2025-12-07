@@ -11,7 +11,7 @@ Gabriel Braun, 2025
 #include "tscfl_solver.hpp"
 #include "tscfl_utils.hpp"
 
-// SOLVER TSCFL: CPLEX
+// SOLVER: CPLEX.
 class TSCFLSolverCplex : public TSCFLSolver
 {
   private:

@@ -94,6 +94,10 @@ TSCFLSolverCplex::solve(bool log_output, double time_limit)
         {
             lb = cplex.getBestObjValue();
             ub = cplex.getObjValue();
+
+            cplex.getValues(a, var_a);
+            cplex.getValues(b, var_b);
+            updateFlows(cplex, var_x, var_y);
         }
 
     // Recuperação das estatísticas

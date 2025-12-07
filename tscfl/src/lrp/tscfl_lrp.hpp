@@ -36,7 +36,6 @@ class LRP
 
     // Solução Lagrangeana corrente
     IloNum opt{ 0.0 };
-
     IloNumArray a;  // a[i]
     IloNumArray b;  // b[j]
     IloNumMatrix x; // x[i][j]

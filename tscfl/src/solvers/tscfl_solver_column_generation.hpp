@@ -13,6 +13,7 @@ Gabriel Braun, 2025
 #include "subproblem/tscfl_subproblem.hpp"
 #include "tscfl_solver.hpp"
 
+// SOLVER: Geração de Colunas.
 class TSCFLSolverColumnGeneration : public TSCFLSolver
 {
   public:
@@ -55,9 +56,12 @@ class TSCFLSolverColumnGeneration : public TSCFLSolver
     void solve(bool log_output = true, IloNum time_limit = -1.0);
 
   private:
+    // Constrói o modelo inicial do RMP.
     void buildModel();
 
+    // Adiciona uma coluna ao modelo.
     void addColumn(int k, int i, int j);
 
+    // Retorna: número atual de colunas.
     IloInt getNumColumns() const;
 };

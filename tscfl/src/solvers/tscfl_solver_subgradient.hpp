@@ -12,6 +12,7 @@ Gabriel Braun, 2025
 #include "solvers/tscfl_solver.hpp"
 #include "subproblem/tscfl_subproblem.hpp"
 
+// SOLVER: Non-Delayed Relax-and-Cut
 class TSCFLSolverSubgradient : public TSCFLSolver
 {
   public:

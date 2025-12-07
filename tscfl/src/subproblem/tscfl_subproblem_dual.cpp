@@ -60,7 +60,7 @@ SubproblemDual::buildModel()
 }
 
 void
-SubproblemDual::updateModel(const IloNumArray &a, const IloNumArray &b)
+SubproblemDual::updateModel()
 {
     IloExpr obj_expr(env);
 
@@ -78,10 +78,10 @@ SubproblemDual::updateModel(const IloNumArray &a, const IloNumArray &b)
 }
 
 void
-SubproblemDual::solve(const IloNumArray &a, const IloNumArray &b)
+SubproblemDual::solve()
 {
     // Atualiza a função objetivo
-    updateModel(a, b);
+    updateModel();
 
     // Resolve o LP dual
     if (!cplex.solve())

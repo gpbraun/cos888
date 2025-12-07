@@ -8,21 +8,13 @@ Gabriel Braun, 2025
 
 #pragma once
 
-/*
-COS888
-
-SubproblemNet: resolve o subproblema de fluxo mínimo do TSCFL.
-
-Gabriel Braun, 2025
-*/
-
 #include <ilcplex/cplex.h>
 
 #include <vector>
 
 #include "tscfl_subproblem.hpp"
 
-// SOLVER DO SUBPROBLEMA: Fluxo mínimo em rede.
+// SOLVER DO SUBPROBLEMA: Fluxo de custo mínimo em rede.
 class SubproblemNet : public Subproblem
 {
   private:
@@ -47,12 +39,12 @@ class SubproblemNet : public Subproblem
 
     // Dado (a_vals, b_vals) da solução atual do mestre, resolve o subproblema.
     // Atualiza: theta, rhs, coef_a, coef_b
-    void solve(const IloNumArray &a, const IloNumArray &b) override;
+    void solve() override;
 
   private:
     // Constrói a rede base
     void buildNet();
 
     // Atualiza as capacidades dos arcos que dependem de (a,b)
-    void updateNet(const IloNumArray &a, const IloNumArray &b);
+    void updateNet();
 };

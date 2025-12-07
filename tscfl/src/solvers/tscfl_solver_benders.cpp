@@ -64,7 +64,8 @@ class LazyBendersCallbackI : public IloCplex::LazyConstraintCallbackI
         eta = getValue(var_eta);
 
         // Resolve subproblema
-        subproblem.solve(a, b);
+        subproblem.update(a, b);
+        subproblem.solve();
 
         // Testa violação
         IloNum viol = subproblem.theta - eta;
@@ -216,7 +217,8 @@ class UserBendersCallbackI : public IloCplex::UserCutCallbackI
             b_sep[j] = OMEGA_SET * b[j] + (1.0 - OMEGA_SET) * b_core[j];
 
         // Resolve subproblema no ponto de separação
-        subproblem.solve(a_sep, b_sep);
+        subproblem.update(a_sep, b_sep);
+        subproblem.solve();
 
         // Teste de violação avaliado na solução LP
         IloNum theta = subproblem.theta;
@@ -307,6 +309,10 @@ TSCFLSolverBenders::solve(bool log_output, double time_limit)
         {
             lb = cplex.getBestObjValue();
             ub = cplex.getObjValue();
+
+            cplex.getValues(a, var_a);
+            cplex.getValues(b, var_b);
+            updateFlows();
         }
 
     // Recuperação das estatísticas

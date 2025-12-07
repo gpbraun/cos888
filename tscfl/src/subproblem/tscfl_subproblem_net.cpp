@@ -41,9 +41,8 @@ SubproblemNet::~SubproblemNet()
     if (env != nullptr)
         {
             if (net != nullptr)
-                {
-                    CPXNETfreeprob(env, &net);
-                }
+                CPXNETfreeprob(env, &net);
+
             CPXcloseCPLEX(&env);
             env = nullptr;
         }
@@ -203,7 +202,7 @@ SubproblemNet::buildNet()
 }
 
 void
-SubproblemNet::updateNet(const IloNumArray &a, const IloNumArray &b)
+SubproblemNet::updateNet()
 {
     const int nI = inst.nI;
     const int nJ = inst.nJ;
@@ -230,14 +229,14 @@ SubproblemNet::updateNet(const IloNumArray &a, const IloNumArray &b)
 }
 
 void
-SubproblemNet::solve(const IloNumArray &a, const IloNumArray &b)
+SubproblemNet::solve()
 {
     const int nI = inst.nI;
     const int nJ = inst.nJ;
     const int nK = inst.nK;
 
     // Atualiza capacidades dos arcos dependentes de (a,b)
-    updateNet(a, b);
+    updateNet();
 
     // Resolve o problema de fluxo mínimo
     status = CPXNETprimopt(env, net);

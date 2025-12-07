@@ -20,9 +20,12 @@ SubproblemPrimal::SubproblemPrimal(const TSCFLInstance &inst_)
       constr_l1(env, inst_.nI),
       constr_l2(env, inst_.nJ),
       constr_m1(env, inst_.nJ),
-      constr_m2(env, inst_.nK)
+      constr_m2(env, inst_.nK),
+      l1(inst_.env, inst.nI),
+      l2(inst_.env, inst.nJ),
+      m2(inst_.env, inst.nK)
 {
-    buildBaseModel();
+    buildModel();
     cplex.extract(model);
 
     // Parâmetros do CPLEX (subproblema)
@@ -43,7 +46,7 @@ SubproblemPrimal::~SubproblemPrimal()
 }
 
 void
-SubproblemPrimal::buildBaseModel()
+SubproblemPrimal::buildModel()
 {
     // RESTRIÇÕES DO SUBPROBLEMA PRIMAL
     // Capacidade das plantas
@@ -81,7 +84,7 @@ SubproblemPrimal::buildBaseModel()
 }
 
 void
-SubproblemPrimal::updateModel(const IloNumArray &a, const IloNumArray &b)
+SubproblemPrimal::updateModel()
 {
     // Capacidade das plantas
     for (int i = 0; i < inst.nI; ++i)
@@ -93,10 +96,10 @@ SubproblemPrimal::updateModel(const IloNumArray &a, const IloNumArray &b)
 }
 
 void
-SubproblemPrimal::solve(const IloNumArray &a, const IloNumArray &b)
+SubproblemPrimal::solve()
 {
     // Atualiza as restrições dependentes de (a,b)
-    updateModel(a, b);
+    updateModel();
 
     // Resolve o LP primal
     if (!cplex.solve())
@@ -104,11 +107,7 @@ SubproblemPrimal::solve(const IloNumArray &a, const IloNumArray &b)
 
     theta = cplex.getObjValue();
 
-    // Lê as variáveis duais
-    IloNumArray l1(env, inst.nI);
-    IloNumArray l2(env, inst.nJ);
-    IloNumArray m2(env, inst.nK);
-
+    // Extrai as variáveis duais
     cplex.getDuals(l1, constr_l1);
     cplex.getDuals(l2, constr_l2);
     cplex.getDuals(m2, constr_m2);
@@ -122,10 +121,16 @@ SubproblemPrimal::solve(const IloNumArray &a, const IloNumArray &b)
 
     rhs = IloScalProd(inst.r, m2);
 
-    l1.end();
-    l2.end();
-    m2.end();
-
     // Calcula o custo do problema original
     opt = IloScalProd(inst.f, a) + IloScalProd(inst.g, b) + theta;
+}
+
+void
+SubproblemPrimal::getFlows(IloNumMatrix &x, const IloNumMatrix &y)
+{
+    for (int i = 0; i < inst.nI; ++i)
+        cplex.getValues(x[i], var_x[i]);
+
+    for (int j = 0; j < inst.nJ; ++j)
+        cplex.getValues(y[j], var_y[j]);
 }

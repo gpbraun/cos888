@@ -23,7 +23,6 @@ class SubproblemDual : public Subproblem
     IloNumVarArray var_l2; // var_l2[j] <= 0
     IloNumVarArray var_m1; // var_m1[j] livre
     IloNumVarArray var_m2; // var_m2[k] livre
-
     // Função objetivo
     IloObjective obj;
 
@@ -32,14 +31,14 @@ class SubproblemDual : public Subproblem
 
     ~SubproblemDual() override;
 
-    // Dado (a_vals, b_vals) da solução atual do mestre, resolve o subproblema.
-    // Atualiza: theta, rhs, coef_a, coef_b
-    void solve(const IloNumArray &a, const IloNumArray &b) override;
+    // Resolve o subproblema.
+    // Atualiza: x, y, opt, theta, rhs, coef_a, coef_b
+    void solve() override;
 
   private:
     // Constrói: modelo base do subproblema dual
     void buildModel();
 
     // Atualiza: função objetivo do subproblema em função de (a,b)
-    void updateModel(const IloNumArray &a, const IloNumArray &b);
+    void updateModel();
 };

@@ -27,7 +27,10 @@ class Subproblem
         NET
     };
 
-    // Saída do subproblema
+    IloNumArray a; // a[i]
+    IloNumArray b; // b[j]
+
+    // Solução do subproblema
     IloNum opt{ 0.0 }; // valor ótimo do problema original
 
     // Coeficientes do corte de Benders
@@ -43,25 +46,22 @@ class Subproblem
     // Factory: cria implementação concreta a partir do modo.
     static std::unique_ptr<Subproblem> create(const TSCFLInstance &inst, Mode mode);
 
-    // Dado (a_vals, b_vals) da solução atual do mestre, resolve o subproblema.
-    // Atualiza: opt, theta, rhs, coef_a, coef_b
-    virtual void solve(const IloNumArray &a, const IloNumArray &b) = 0;
+    // Atualiza: a e b.
+    void update(const IloNumArray &a_, const IloNumArray &b_, bool convert_to_primal = false);
 
-    // Heurística primal.
-    // Dado (a_frac, b_frac), encontra (a_int e b_int) e resolve o subproblema.
-    // Atualiza: opt, theta, rhs, coef_a, coef_b
-    void solveHeuristic(
-        const IloNumArray &a_frac, const IloNumArray &b_frac, IloNumArray &a_int, IloNumArray &b_int
-    );
-
-    // Heurística primal.
-    // Dado (a_frac, b_frac), encontra (a_int e b_int) e resolve o subproblema.
-    // Atualiza: opt, theta, rhs, coef_a, coef_b
-    void solveHeuristic(
+    // Atualiza: a e b a partir das variáveis do modelo.
+    void update(
         const IloCplex &cpx,
         const IloNumVarArray &var_a,
         const IloNumVarArray &var_b,
-        IloNumArray &a_int,
-        IloNumArray &b_int
+        bool convert_to_primal = false
     );
+
+    // Resolve o subproblema.
+    // Atualiza: x, y, opt, theta, rhs, coef_a, coef_b
+    virtual void solve() = 0;
+
+  private:
+    // Atualiza: a e b para respeitarem o problema original usando uma heurística.
+    void convertToPrimal();
 };

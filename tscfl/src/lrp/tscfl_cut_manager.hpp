@@ -31,12 +31,12 @@ class Cut
     IloNum u{ 0.0 };        // multiplicador de Lagrange
     IloNum overflow{ 0.0 }; // violação (LHS - RHS)
     IloNum rhs{ 0.0 };      // lado direito
-    std::size_t hash{ 0u }; // assinatura para detectar duplicados
+    std::size_t hash{ 0u }; // assinatura para detectar duplicatas
 
     Cut(IloNum rhs_, std::size_t hash_);
     virtual ~Cut() = default;
 
-    // LHS do corte em uma solução (x,y,a,b)
+    // Retorna: LHS do corte em uma solução (x,y,a,b)
     virtual IloNum compute_lhs(
         const TSCFLInstance &inst,
         const IloNumMatrix &x_lr,
