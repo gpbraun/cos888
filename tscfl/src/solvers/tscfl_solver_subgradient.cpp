@@ -12,26 +12,16 @@ Gabriel Braun, 2025
 #include <iomanip>
 #include <iostream>
 
-// ---------------------------------------------------------------------
-//  Construtor
-// ---------------------------------------------------------------------
-
 TSCFLSolverSubgradient::TSCFLSolverSubgradient(
-    const TSCFLInstance &inst_,
-    LRP::Mode rmode,
-    Subproblem::Mode smode
+    const TSCFLInstance &inst_, LRP::Mode rmode, Subproblem::Mode smode
 )
-    : TSCFLSolver(inst_), // chama construtor da base
+    : TSCFLSolver(inst_),
       relaxation(LRP::create(inst_, rmode)),
       subproblem(Subproblem::create(inst_, smode)),
-      a(env, inst_.nI), // usa env da base
+      a(env, inst_.nI),
       b(env, inst_.nJ)
 {
 }
-
-// ---------------------------------------------------------------------
-//  Método principal
-// ---------------------------------------------------------------------
 
 bool
 TSCFLSolverSubgradient::solve(bool log_output, IloNum time_limit)
@@ -52,11 +42,43 @@ TSCFLSolverSubgradient::solve(bool log_output, IloNum time_limit)
     if (log_output)
         {
             std::cout << "\n\n[SG] Iniciando Subgradiente\n\n"
-                      << std::right << std::setw(5) << "iter" << std::setw(10) << "no improve"
-                      << std::setw(10) << "time(s)" << std::setw(15) << "opt_LR" << std::setw(15)
-                      << "LB" << std::setw(15) << "UB" << std::setw(12) << "gap" << std::setw(12)
-                      << "step" << std::setw(12) << "||g||^2" << std::setw(10) << "|CA|"
-                      << std::setw(10) << "|PA|" << std::setw(10) << "|CI|"
+                      //
+                      << std::right << std::setw(5)
+                      << "iter"
+                      //
+                      << std::setw(10)
+                      << "n.imprv."
+                      //
+                      << std::setw(10)
+                      << "time(s)"
+                      //
+                      << std::setw(15)
+                      << "opt_LR"
+                      //
+                      << std::setw(15)
+                      << "LB"
+                      //
+                      << std::setw(15)
+                      << "UB"
+                      //
+                      << std::setw(12)
+                      << "gap"
+                      //
+                      << std::setw(12)
+                      << "step"
+                      //
+                      << std::setw(12)
+                      << "||g||^2"
+                      //
+                      << std::setw(10)
+                      << "|CA|"
+                      //
+                      << std::setw(10)
+                      << "|PA|"
+                      //
+                      << std::setw(10)
+                      << "|CI|"
+                      //
                       << "\n"
                       << std::string(140, '-') << "\n"
                       << std::defaultfloat;
@@ -71,11 +93,11 @@ TSCFLSolverSubgradient::solve(bool log_output, IloNum time_limit)
                 break;
 
             // Resolve subproblema Lagrangeano
-            IloNum opt_lr = LR.solve();
+            LR.solve();
 
-            if (opt_lr > lb + EPS)
+            if (LR.opt > lb + EPS)
                 {
-                    lb = opt_lr;
+                    lb = LR.opt;
                     last_improv_iter = iter;
                 }
 
@@ -91,25 +113,33 @@ TSCFLSolverSubgradient::solve(bool log_output, IloNum time_limit)
 
             cuts.update_status(LR.x, LR.y, LR.a, LR.b, EXTRA_AGE);
 
-            // Heurística primal periódica
+            // Heurística primal
             if (iter == 0 || (last_improv_iter == iter) || (iter % SOLVE_HEURISTIC_EVERY == 0))
                 {
-                    IloNum opt_h = SP.solve_primal_heuristic(LR.a, LR.b, a_h, b_h);
-                    if (opt_h + EPS < ub)
+                    SP.solve_primal_heuristic(LR.a, LR.b, a_h, b_h);
+
+                    if (SP.opt + EPS < ub)
                         {
-                            ub = opt_h;
-                            a = LR.a;
-                            b = LR.b;
+                            ub = SP.opt;
+                            a = a_h;
+                            b = b_h;
                         }
                 }
 
             update_gap();
 
+            // Critério de parada por iterações sem melhora
+            if (iter - last_improv_iter >= MAX_NO_IMPROV)
+                break;
+            // Critério de parada por gap
+            if (status == IloAlgorithm::Optimal)
+                break;
+
             // Passo do subgradiente
             IloNum norm2 = LR.norm2sq();
             IloNum step = 0.0;
             if (norm2 > EPS)
-                step = IloMax(epsilon * (ub - opt_lr) / norm2, 0.0);
+                step = IloMax(epsilon * (ub - LR.opt) / norm2, 0.0);
 
             // Atualiza multiplicadores
             LR.update_multipliers(step);
@@ -129,28 +159,44 @@ TSCFLSolverSubgradient::solve(bool log_output, IloNum time_limit)
                     IloInt nPA = cuts.count(Cut::Status::PA);
                     IloInt nCI = cuts.count(Cut::Status::CI);
 
-                    std::cout << std::right << std::setw(5) << iter << std::setw(10)
-                              << (iter - last_improv_iter) << std::fixed << std::setprecision(1)
-                              << std::setw(10) << elapsed << std::fixed << std::setprecision(0)
-                              << std::setw(15) << opt_lr << std::setw(15) << lb << std::setw(15)
-                              << ub << std::scientific << std::setprecision(2) << std::setw(12)
-                              << gap << std::setw(12) << step << std::setw(12) << norm2
-                              << std::fixed << std::setw(10) << nCA << std::setw(10) << nPA
-                              << std::setw(10) << nCI << "\n"
+                    std::cout << std::right << std::setw(5)
+                              << iter
+                              //
+                              << std::setw(10)
+                              << (iter - last_improv_iter)
+                              //
+                              << std::fixed << std::setprecision(1) << std::setw(10)
+                              << elapsed
+                              //
+                              << std::fixed << std::setprecision(0) << std::setw(15)
+                              << LR.opt
+                              //
+                              << std::setw(15)
+                              << lb
+                              //
+                              << std::setw(15)
+                              << ub
+                              //
+                              << std::scientific << std::setprecision(2) << std::setw(12)
+                              << gap
+                              //
+                              << std::setw(12)
+                              << step
+                              //
+                              << std::setw(12)
+                              << norm2
+                              //
+                              << std::fixed << std::setw(10)
+                              << nCA
+                              //
+                              << std::setw(10)
+                              << nPA
+                              //
+                              << std::setw(10)
+                              << nCI
+                              //
+                              << "\n"
                               << std::defaultfloat;
-                }
-
-            // Critério de parada por iterações sem melhora
-            if (iter - last_improv_iter >= MAX_NO_IMPROV)
-                {
-                    break;
-                }
-
-            // Critério de parada por gap
-            if (gap <= MIP_GAP && ub < IloInfinity && lb > 0.0)
-                {
-                    status = IloAlgorithm::Optimal;
-                    break;
                 }
 
             ++iter;
@@ -159,13 +205,8 @@ TSCFLSolverSubgradient::solve(bool log_output, IloNum time_limit)
     auto t_end = std::chrono::steady_clock::now();
     time = std::chrono::duration<IloNum>(t_end - t0).count();
 
-    update_status();
-
     // Log final
-    if (log_output)
-        {
-            print_summary("SUBGRADIENTE");
-        }
+    print_summary("SUBGRADIENTE");
 
-    return (status == IloAlgorithm::Optimal);
+    return (status == IloAlgorithm::Optimal || status == IloAlgorithm::Feasible);
 }

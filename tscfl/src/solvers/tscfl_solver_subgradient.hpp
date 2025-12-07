@@ -20,9 +20,9 @@ class TSCFLSolverSubgradient : public TSCFLSolver
     static constexpr IloInt IMPROV_EPSILON = 50;
     static constexpr IloInt EXTRA_AGE = 3;
     static constexpr IloInt MAX_NEW_CUTS = 10;
-    static constexpr IloInt SOLVE_HEURISTIC_EVERY = 10;
-    static constexpr IloInt MAX_NO_IMPROV = 250;
-    static constexpr IloInt PRINT_EVERY = 10;
+    static constexpr IloInt SOLVE_HEURISTIC_EVERY = 20;
+    static constexpr IloInt MAX_NO_IMPROV = 150;
+    static constexpr IloInt PRINT_EVERY = 200;
 
   private:
     std::unique_ptr<LRP> relaxation;

@@ -35,6 +35,8 @@ class LRP
     Mode mode;
 
     // Solução Lagrangeana corrente
+    IloNum opt{ 0.0 };
+
     IloNumArray a;  // a[i]
     IloNumArray b;  // b[j]
     IloNumMatrix x; // x[i][j]
@@ -48,15 +50,14 @@ class LRP
     static std::unique_ptr<LRP> create(const TSCFLInstance &inst, Mode mode_);
 
     // Resolve o subproblema Lagrangeano para os multiplicadores atuais.
-    // Atualiza: a, b, x, y
-    // Retorna: opt.
-    virtual IloNum solve() = 0;
-
-    // Retorna: ||g||^2 (quadrado da norma dos subgradientes)
-    virtual IloNum norm2sq() const = 0;
+    // Atualiza: opt, a, b, x, y
+    virtual void solve() = 0;
 
     // Atualiza multiplicadores (l1,l2 ou m1,m2) e dos cortes.
     virtual void update_multipliers(IloNum step) = 0;
+
+    // Retorna: ||g||^2 (quadrado da norma dos subgradientes)
+    virtual IloNum norm2sq() const = 0;
 
     // Separa cortes FlowCovers a partir da solução LR atual
     IloInt separate_flow_covers(IloInt max_new_cuts);

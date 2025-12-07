@@ -41,14 +41,22 @@ Subproblem::create(const TSCFLInstance &inst, Mode mode)
         }
 }
 
-IloNum
+void
+Subproblem::update_opt(const IloNumArray &a, const IloNumArray &b)
+{
+    IloNum fixed_cost = IloScalProd(inst.f, a) + IloScalProd(inst.g, b);
+    opt = fixed_cost + theta;
+}
+
+void
 Subproblem::solve_primal_heuristic(
     const IloNumArray &a_frac, const IloNumArray &b_frac, IloNumArray &a_int, IloNumArray &b_int
 )
 {
-    IloNum demand_sum = IloSum(inst.r);
     fill_zero(a_int);
     fill_zero(b_int);
+
+    IloNum demand_sum = IloSum(inst.r);
 
     // Seleção de plantas abertas
     std::vector<int> ordI(inst.nI);
@@ -108,11 +116,9 @@ Subproblem::solve_primal_heuristic(
 
     // Resolve o subproblema de fluxo mínimo para (a_int, b_int)
     this->solve(a_int, b_int);
-
-    return opt;
 }
 
-IloNum
+void
 Subproblem::solve_primal_heuristic(
     const IloCplex &cpx,
     const IloNumVarArray &var_a,
@@ -127,5 +133,5 @@ Subproblem::solve_primal_heuristic(
     cpx.getValues(a_frac, var_a);
     cpx.getValues(b_frac, var_b);
 
-    return solve_primal_heuristic(a_frac, b_frac, a_int, b_int);
+    solve_primal_heuristic(a_frac, b_frac, a_int, b_int);
 }

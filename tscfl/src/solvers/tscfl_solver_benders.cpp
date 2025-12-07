@@ -245,10 +245,6 @@ class UserBendersCallbackI : public IloCplex::UserCutCallbackI
 
 } // namespace
 
-// =====================================================================
-//  SOLVER BENDERS
-// =====================================================================
-
 TSCFLSolverBenders::TSCFLSolverBenders(const TSCFLInstance &inst_, Subproblem::Mode smode)
     : TSCFLSolver(inst_),
       model(env),
@@ -320,20 +316,14 @@ TSCFLSolverBenders::solve(bool log_output, double time_limit)
     gap = cplex.getMIPRelativeGap();
     nodes = cplex.getNnodes64();
     time = cplex.getTime();
-
     if (ok)
         {
             ub = cplex.getObjValue();
             lb = cplex.getBestObjValue();
-
-            print_summary("BENDERS");
-        }
-    else
-        {
-            std::cerr << "\n[BENDERS] Sem solução. status = " << status << "\n";
-            std::cerr << "nodes = " << nodes << "\n";
-            std::cerr << "time  = " << time << " s\n";
         }
 
-    return ok;
+    // Log final
+    print_summary("BENDERS");
+
+    return (status == IloAlgorithm::Optimal || status == IloAlgorithm::Feasible);
 }

@@ -23,38 +23,19 @@ LRPBalance::LRPBalance(const TSCFLInstance &inst_)
     fill_zero(g2);
 }
 
-// --------------------------------------------------------------
-// Resolve o subproblema Lagrangeano para (m1, m2, u_cuts) fixos.
-//
-// Atualiza (a, b, x, y, g1, g2) e devolve z_LR.
-//
-// Estrutura:
-//  (1) Para cada planta i: mochila contínua em x_ij com cap. p_i a_i
-//      reduzido: c_ij + m2_j + cuts.cost_x[i][j]
-//  (2) Para cada depósito j: mochila contínua em y_jk com cap. q_j b_j
-//      reduzido: d_jk - m1_k - m2_j + cuts.cost_y[j][k]
-// --------------------------------------------------------------
-IloNum
+void
 LRPBalance::solve()
 {
     const IloInt nI = inst.nI;
     const IloInt nJ = inst.nJ;
     const IloInt nK = inst.nK;
 
-    // 0) Zera fluxos e atualiza custos induzidos pelos cortes
+    // Zera fluxos e atualiza custos induzidos pelos cortes
     fill_zero(x);
     fill_zero(y);
     cuts.update_costs();
 
-    // ==========================================================
-    // 1) Subproblema das plantas (x, a)
-    //    Para cada i, com cap. p_i a_i:
-    //
-    //  Se a_i = 0  → custo = 0
-    //  Se a_i = 1  → escolhe j* com menor custo reduzido
-    //                 red_ij = c_ij + m2_j + cuts.cost_x[i][j]
-    //               se red_{i j*} < 0, envia p_i em (i,j*)
-    // ==========================================================
+    // Subproblema das plantas (x, a)
     for (IloInt i = 0; i < nI; ++i)
         {
             IloNum best_red = IloInfinity;
@@ -102,15 +83,7 @@ LRPBalance::solve()
                 }
         }
 
-    // ==========================================================
     // 2) Subproblema dos depósitos (y, b)
-    //    Para cada j, com cap. q_j b_j:
-    //
-    //  Se b_j = 0 → custo = 0
-    //  Se b_j = 1 → escolhe k* com menor custo reduzido
-    //                 red_jk = d_jk - m1_k - m2_j + cuts.cost_y[j][k]
-    //               se red_{j k*} < 0, envia q_j em (j,k*)
-    // ==========================================================
     for (IloInt j = 0; j < nJ; ++j)
         {
             IloNum best_red = IloInfinity;
@@ -152,12 +125,7 @@ LRPBalance::solve()
                 }
         }
 
-    // ==========================================================
-    // 3) Subgradientes das restrições relaxadas
-    //
-    //    g1[k] = r_k - ∑_j y_jk
-    //    g2[j] = ∑_i x_ij - ∑_k y_jk
-    // ==========================================================
+    // Subgradientes das restrições relaxadas
     // Demanda dos clientes
     for (IloInt k = 0; k < nK; ++k)
         {
@@ -182,15 +150,8 @@ LRPBalance::solve()
         }
 
     // Valor da Lagrangeana
-    return IloScalProd(inst.f, a) + IloScalProd(inst.g, b) + IloMatScalProd(inst.c, x)
-           + IloMatScalProd(inst.d, y) + IloScalProd(m1, g1) + IloScalProd(m2, g2);
-}
-
-// ||g||^2 = ||g1||^2 + ||g2||^2 + contribuição dos cortes
-IloNum
-LRPBalance::norm2sq() const
-{
-    return IloScalProd(g1, g1) + IloScalProd(g2, g2) + cuts.norm2sq();
+    opt = IloScalProd(inst.f, a) + IloScalProd(inst.g, b) + IloMatScalProd(inst.c, x)
+          + IloMatScalProd(inst.d, y) + IloScalProd(m1, g1) + IloScalProd(m2, g2);
 }
 
 // Atualiza multiplicadores (m1, m2) e multiplicadores dos cortes
@@ -214,4 +175,11 @@ LRPBalance::update_multipliers(IloNum step)
         }
 
     cuts.update_multipliers(step);
+}
+
+// ||g||^2 = ||g1||^2 + ||g2||^2 + contribuição dos cortes
+IloNum
+LRPBalance::norm2sq() const
+{
+    return IloScalProd(g1, g1) + IloScalProd(g2, g2) + cuts.norm2sq();
 }

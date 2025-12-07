@@ -72,8 +72,8 @@ TSCFLSolverCplex::build_model()
     // Função objetivo
     IloExpr obj_expr(env);
 
-    obj_expr += IloScalProd(inst.f, var_a) + IloScalProd(inst.g, var_b);
-    obj_expr += IloMatScalProd(inst.c, var_x) + IloMatScalProd(inst.d, var_y);
+    obj_expr = IloScalProd(inst.f, var_a) + IloScalProd(inst.g, var_b)
+               + IloMatScalProd(inst.c, var_x) + IloMatScalProd(inst.d, var_y);
 
     IloObjective obj = IloMinimize(env, obj_expr);
     model.add(obj);
@@ -106,17 +106,14 @@ TSCFLSolverCplex::solve(bool log_output, double time_limit)
     gap = cplex.getMIPRelativeGap();
     nodes = cplex.getNnodes64();
     time = cplex.getTime();
-
     if (ok)
         {
             ub = cplex.getObjValue();
             lb = cplex.getBestObjValue();
-            print_summary("CPLEX");
-        }
-    else
-        {
-            std::cerr << "\n[CPLEX] Sem solução. status = " << status << "\n";
         }
 
-    return ok;
+    // Log final
+    print_summary("CPLEX");
+
+    return (status == IloAlgorithm::Optimal || status == IloAlgorithm::Feasible);
 }

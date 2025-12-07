@@ -25,6 +25,7 @@ class TSCFLSolverCplex : public TSCFLSolver
 
   public:
     explicit TSCFLSolverCplex(const TSCFLInstance &inst_);
+
     ~TSCFLSolverCplex();
 
     bool solve(bool log_output = true, double time_limit = -1.0) override;

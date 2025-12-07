@@ -233,7 +233,7 @@ SubproblemNet::update_net(const IloNumArray &a, const IloNumArray &b)
         throw std::runtime_error("SubproblemNet: falha em CPXNETchgbds.");
 }
 
-IloNum
+void
 SubproblemNet::solve(const IloNumArray &a, const IloNumArray &b)
 {
     const int nI = inst.nI;
@@ -271,7 +271,6 @@ SubproblemNet::solve(const IloNumArray &a, const IloNumArray &b)
     //   l1_i  = dj[ arcPlantCap[i] ]
     //   l2_j  = dj[ arcDepotCap[j] ]
     //   m2_k  = pi_s - pi_cust(k)
-
     for (int i = 0; i < nI; ++i)
         {
             double l1_i = dj[arcPlantCap[i]];
@@ -295,6 +294,6 @@ SubproblemNet::solve(const IloNumArray &a, const IloNumArray &b)
             rhs += inst.r[k] * m2_k;
         }
 
-    opt = IloScalProd(inst.f, a) + IloScalProd(inst.g, b) + theta;
-    return opt;
+    // Calcula o custo do problema original
+    update_opt(a, b);
 }

@@ -8,10 +8,6 @@ Gabriel Braun, 2025
 
 #include "lrp/tscfl_lrp_capacities.hpp"
 
-// ---------------------------------------------------------------------
-//  Construtor
-// ---------------------------------------------------------------------
-
 LRPCapacity::LRPCapacity(const TSCFLInstance &inst_)
     : LRP(inst_, Mode::CAPACITIES),
       l1(env, inst_.nI),
@@ -23,10 +19,7 @@ LRPCapacity::LRPCapacity(const TSCFLInstance &inst_)
 {
 }
 
-// ---------------------------------------------------------------------
-//  solve
-// ---------------------------------------------------------------------
-IloNum
+void
 LRPCapacity::solve()
 {
     // Zera fluxos, subgradientes e atualiza custos induzidos pelos cortes
@@ -112,23 +105,9 @@ LRPCapacity::solve()
         }
 
     // Valor da Lagrangeana
-    return IloScalProd(inst.f, a) + IloScalProd(inst.g, b) + IloMatScalProd(inst.c, x)
-           + IloMatScalProd(inst.d, y) + IloScalProd(l1, g1) + IloScalProd(l2, g2);
+    opt = IloScalProd(inst.f, a) + IloScalProd(inst.g, b) + IloMatScalProd(inst.c, x)
+          + IloMatScalProd(inst.d, y) + IloScalProd(l1, g1) + IloScalProd(l2, g2);
 }
-
-// ---------------------------------------------------------------------
-//  norm2sq
-// ---------------------------------------------------------------------
-
-IloNum
-LRPCapacity::norm2sq() const
-{
-    return IloScalProd(g1, g1) + IloScalProd(g2, g2) + cuts.norm2sq();
-}
-
-// ---------------------------------------------------------------------
-//  update_multipliers
-// ---------------------------------------------------------------------
 
 void
 LRPCapacity::update_multipliers(IloNum step)
@@ -143,4 +122,10 @@ LRPCapacity::update_multipliers(IloNum step)
         l2[j] = IloMax(0.0, l2[j] + step * g2[j]);
 
     cuts.update_multipliers(step);
+}
+
+IloNum
+LRPCapacity::norm2sq() const
+{
+    return IloScalProd(g1, g1) + IloScalProd(g2, g2) + cuts.norm2sq();
 }

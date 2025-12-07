@@ -12,10 +12,6 @@ Gabriel Braun, 2025
 #include <iomanip>
 #include <iostream>
 
-// ---------------------------------------------------------------------
-// Construtor / Destrutor
-// ---------------------------------------------------------------------
-
 TSCFLSolverColumnGeneration::TSCFLSolverColumnGeneration(
     const TSCFLInstance &inst_, Subproblem::Mode smode
 )
@@ -24,12 +20,12 @@ TSCFLSolverColumnGeneration::TSCFLSolverColumnGeneration(
       cplex(env),
       subproblem(Subproblem::create(inst_, smode)),
       obj(env),
-      var_a(env, inst_.nI, 0.0, 1.0, ILOFLOAT),
-      var_b(env, inst_.nJ, 0.0, 1.0, ILOFLOAT),
+      var_a(env, inst_.nI, 0.0, 1.0),
+      var_b(env, inst_.nJ, 0.0, 1.0),
       constr_l1(env, inst_.nI),
       constr_l2(env, inst_.nJ),
       constr_m2(env, inst_.nK),
-      constrs_m1(env, inst_.nJ),
+      constrs_v(env, inst_.nJ),
       a(env, inst_.nI),
       b(env, inst_.nJ)
 {
@@ -45,7 +41,7 @@ TSCFLSolverColumnGeneration::TSCFLSolverColumnGeneration(
     // Inicializa arrays de restrições (j,k)
     for (IloInt j = 0; j < inst.nJ; ++j)
         {
-            constrs_m1[j] = IloRangeArray(env, inst.nK);
+            constrs_v[j] = IloRangeArray(env, inst.nK);
         }
 
     build_initial_model();
@@ -126,8 +122,8 @@ TSCFLSolverColumnGeneration::build_initial_model()
                 {
                     IloExpr e(env);
                     e -= var_b[j];
-                    constrs_m1[j][k] = (e <= 0.0);
-                    model.add(constrs_m1[j][k]);
+                    constrs_v[j][k] = (e <= 0.0);
+                    model.add(constrs_v[j][k]);
                     e.end();
                 }
         }
@@ -177,7 +173,6 @@ TSCFLSolverColumnGeneration::build_initial_model()
                                         }
                                 }
                         }
-
                     // Sem capacidade total suficiente: aborta distribuição restante
                     if (best_i < 0 || best_j < 0)
                         {
@@ -249,7 +244,7 @@ TSCFLSolverColumnGeneration::add_column_for_client(int k, int i, int j)
     col += constr_m2[k](1.0);
 
     // Vínculo z_{k,*} <= b_j: coeficiente = 1 em (j,k)
-    col += constrs_m1[j][k](1.0);
+    col += constrs_v[j][k](1.0);
 
     IloNumVar z_var(col, 0.0, IloInfinity, ILOFLOAT);
     z[k].add(z_var);
@@ -292,9 +287,23 @@ TSCFLSolverColumnGeneration::solve(bool log_output, IloNum time_limit)
 
     if (log_output)
         {
-            std::cout << "\n\n[CG] Iniciando Geração de Colunas\n";
-            std::cout << std::right << std::setw(5) << "it" << std::setw(10) << "time(s)"
-                      << std::setw(15) << "LB" << std::setw(15) << "UB" << std::setw(12) << "gap"
+            std::cout << "\n\n[CG] Iniciando Geração de Colunas\n\n"
+                      //
+                      << std::right << std::setw(5)
+                      << "it"
+                      //
+                      << std::setw(10)
+                      << "time(s)"
+                      //
+                      << std::setw(15)
+                      << "LB"
+                      //
+                      << std::setw(15)
+                      << "UB"
+                      //
+                      << std::setw(12)
+                      << "gap"
+                      //
                       << std::setw(10) << "cols"
                       << "\n"
                       << std::string(70, '-') << "\n"
@@ -339,10 +348,11 @@ TSCFLSolverColumnGeneration::solve(bool log_output, IloNum time_limit)
             cplex.getValues(var_a, a_lr);
             cplex.getValues(var_b, b_lr);
 
-            IloNum opt_h = SP.solve_primal_heuristic(a_lr, b_lr, a_h, b_h);
-            if (opt_h + EPS < ub)
+            SP.solve_primal_heuristic(a_lr, b_lr, a_h, b_h);
+
+            if (SP.opt + EPS < ub)
                 {
-                    ub = opt_h;
+                    ub = SP.opt;
                     a = a_h;
                     b = b_h;
                 }
@@ -357,7 +367,7 @@ TSCFLSolverColumnGeneration::solve(bool log_output, IloNum time_limit)
             cplex.getDuals(m2, constr_m2);
             for (IloInt j = 0; j < inst.nJ; ++j)
                 {
-                    cplex.getDuals(m1[j], constrs_m1[j]);
+                    cplex.getDuals(m1[j], constrs_v[j]);
                 }
 
             // ---------------------------------------------------------
@@ -411,11 +421,27 @@ TSCFLSolverColumnGeneration::solve(bool log_output, IloNum time_limit)
             // ---------------------------------------------------------
             if (log_output && (iter % PRINT_EVERY == 0 || !any_new))
                 {
-                    std::cout << std::right << std::setw(5) << iter << std::fixed
-                              << std::setprecision(1) << std::setw(10) << elapsed
-                              << std::setprecision(0) << std::setw(15) << lb << std::setw(15) << ub
-                              << std::scientific << std::setprecision(2) << std::setw(12) << gap
-                              << std::fixed << std::setw(10) << get_num_columns() << "\n"
+                    IloInt num_columns = get_num_columns();
+
+                    std::cout << std::right << std::setw(5)
+                              << iter
+                              //
+                              << std::fixed << std::setprecision(1) << std::setw(10)
+                              << elapsed
+                              //
+                              << std::setprecision(0) << std::setw(15)
+                              << lb
+                              //
+                              << std::setw(15)
+                              << ub
+                              //
+                              << std::scientific << std::setprecision(2) << std::setw(12)
+                              << gap
+                              //
+                              << std::fixed << std::setw(10)
+                              << num_columns
+                              //
+                              << "\n"
                               << std::defaultfloat;
                 }
 
@@ -434,13 +460,8 @@ TSCFLSolverColumnGeneration::solve(bool log_output, IloNum time_limit)
     auto t_end = std::chrono::steady_clock::now();
     time = std::chrono::duration<IloNum>(t_end - t0).count();
 
-    update_status();
-
     // Log final
-    if (log_output)
-        {
-            print_summary("GERAÇÃO DE COLUNAS");
-        }
+    print_summary("GERAÇÃO DE COLUNAS");
 
-    return (status == IloAlgorithm::Optimal);
+    return (status == IloAlgorithm::Optimal || status == IloAlgorithm::Feasible);
 }

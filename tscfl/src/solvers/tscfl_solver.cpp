@@ -30,15 +30,12 @@ TSCFLSolver::update_gap()
     if (ub < IloInfinity && lb > EPS && ub > lb)
         {
             gap = (ub - lb) / IloAbs(ub);
-        }
-}
 
-void
-TSCFLSolver::update_status()
-{
-    if (status == IloAlgorithm::Unknown)
-        {
-            if (ub < IloInfinity && lb > EPS)
+            if (gap <= MIP_GAP)
+                {
+                    status = IloAlgorithm::Optimal;
+                }
+            else
                 {
                     status = IloAlgorithm::Feasible;
                 }

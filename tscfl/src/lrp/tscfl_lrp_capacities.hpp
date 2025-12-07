@@ -28,13 +28,13 @@ class LRPCapacity : public LRP
   public:
     explicit LRPCapacity(const TSCFLInstance &inst_);
 
-    // Resolve o subproblema Lagrangeano para (l1, l2, u_cuts) fixos e atualiza (a, b, x, y).
-    // Retorna: z_LR
-    IloNum solve() override;
-
-    // ||g||^2 = ||g1||^2 + ||g2||^2 + contribuição dos cortes
-    IloNum norm2sq() const override;
+    // Resolve o subproblema Lagrangeano para (m1, m2, u_cuts) fixos.
+    // Atualiza: opt, a, b, x, y, g1, g2
+    void solve() override;
 
     // Atualiza multiplicadores (l1, l2) e multiplicadores dos cortes
     void update_multipliers(IloNum step) override;
+
+    // ||g||^2 = ||g1||^2 + ||g2||^2 + contribuição dos cortes
+    IloNum norm2sq() const override;
 };

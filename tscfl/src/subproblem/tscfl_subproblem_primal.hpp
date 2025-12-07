@@ -34,7 +34,7 @@ class SubproblemPrimal : public Subproblem
 
     // Dado (a_vals, b_vals) da solução atual do mestre, resolve o subproblema.
     // Atualiza: theta, rhs, coef_a, coef_b
-    IloNum solve(const IloNumArray &a, const IloNumArray &b) override;
+    void solve(const IloNumArray &a, const IloNumArray &b) override;
 
   private:
     // Constrói o modelo base do subproblema primal

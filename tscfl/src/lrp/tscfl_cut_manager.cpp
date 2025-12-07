@@ -12,19 +12,11 @@ Gabriel Braun, 2025
 
 #include "lrp/tscfl_cut_manager.hpp"
 
-// =====================================================================
-//  Cut – implementação
-// =====================================================================
-
 Cut::Cut(IloNum rhs_, std::size_t hash_)
     : rhs(rhs_),
       hash(hash_)
 {
 }
-
-// =====================================================================
-//  FlowCoverCut – implementação
-// =====================================================================
 
 FlowCoverCut::FlowCoverCut(NodeType node_type, int index, const IloNumArray &cost, IloNum rhs)
     : Cut(rhs, compute_hash(node_type, index, cost)),
@@ -133,10 +125,6 @@ FlowCoverCut::add_to_costs(
         }
 }
 
-// =====================================================================
-//  SubsetRowCut – implementação
-// =====================================================================
-
 SubsetRowCut::SubsetRowCut(Family family, const IloNumArray &coeff, IloNum rhs)
     : Cut(rhs, compute_hash(family, coeff)),
       family_(family),
@@ -199,8 +187,8 @@ SubsetRowCut::compute_lhs(
                     lhs += -coeff_[i] * a_lr[i];
                 }
         }
-    else
-        { // DEPOT
+    else // DEPOT
+        {
             for (IloInt j : support_)
                 {
                     lhs += -coeff_[j] * b_lr[j];
@@ -225,18 +213,14 @@ SubsetRowCut::add_to_costs(
                     cost_a[i] += -u * coeff_[i];
                 }
         }
-    else
-        { // DEPOT
+    else // DEPOT
+        {
             for (IloInt j : support_)
                 {
                     cost_b[j] += -u * coeff_[j];
                 }
         }
 }
-
-// =====================================================================
-//  CutManager – implementação
-// =====================================================================
 
 CutManager::CutManager(const TSCFLInstance &inst_)
     : env(inst_.env),

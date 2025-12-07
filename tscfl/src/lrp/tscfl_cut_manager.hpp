@@ -198,9 +198,7 @@ class CutManager
 
     // Adiciona: FlowCover
     bool add_flow_cover(const FlowCoverCut &cut);
-    bool add_flow_cover(
-        FlowCoverCut::NodeType node_type, int index, const IloNumArray &cost, IloNum rhs
-    );
+    bool add_flow_cover(FlowCoverCut::NodeType node_type, int index, const IloNumArray &cost, IloNum rhs);
 
     // Adiciona: SubsetRow
     bool add_subset_row(const SubsetRowCut &cut);

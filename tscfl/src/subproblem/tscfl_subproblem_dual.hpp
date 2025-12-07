@@ -33,7 +33,7 @@ class SubproblemDual : public Subproblem
 
     // Dado (a_vals, b_vals) da solução atual do mestre, resolve o subproblema.
     // Atualiza: theta, rhs, coef_a, coef_b
-    IloNum solve(const IloNumArray &a_vals, const IloNumArray &b_vals) override;
+    void solve(const IloNumArray &a_vals, const IloNumArray &b_vals) override;
 
   private:
     // Constrói: modelo base do subproblema dual

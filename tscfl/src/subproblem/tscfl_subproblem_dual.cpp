@@ -15,10 +15,10 @@ SubproblemDual::SubproblemDual(const TSCFLInstance &inst_)
       env(),
       model(env),
       cplex(env),
-      var_l1(env, inst_.nI, 0.0, IloInfinity, ILOFLOAT),
-      var_l2(env, inst_.nJ, 0.0, IloInfinity, ILOFLOAT),
-      var_m1(env, inst_.nJ, -IloInfinity, IloInfinity, ILOFLOAT),
-      var_m2(env, inst_.nK, -IloInfinity, IloInfinity, ILOFLOAT),
+      var_l1(env, inst_.nI, -IloInfinity, 0.0),
+      var_l2(env, inst_.nJ, -IloInfinity, 0.0),
+      var_m1(env, inst_.nJ, -IloInfinity, IloInfinity),
+      var_m2(env, inst_.nK, -IloInfinity, IloInfinity),
       obj(IloMaximize(env, 0.0))
 {
     build_base_model();
@@ -27,7 +27,7 @@ SubproblemDual::SubproblemDual(const TSCFLInstance &inst_)
     // Parâmetros do CPLEX (subproblema)
     cplex.setParam(IloCplex::Param::Threads, 1);
     cplex.setParam(IloCplex::Param::Preprocessing::Reduce, 0);
-    cplex.setParam(IloCplex::Param::RootAlgorithm, IloCplex::Dual);
+    cplex.setParam(IloCplex::Param::RootAlgorithm, IloCplex::Primal);
 
     // Subproblema silencioso por padrão
     cplex.setOut(env.getNullStream());
@@ -45,7 +45,6 @@ void
 SubproblemDual::build_base_model()
 {
     // RESTRIÇÕES DO SUBPROBLEMA DUAL
-
     // arcos planta -> depósito
     for (int i = 0; i < inst.nI; ++i)
         for (int j = 0; j < inst.nJ; ++j)
@@ -78,7 +77,7 @@ SubproblemDual::update_model(const IloNumArray &a, const IloNumArray &b)
     obj_expr.end();
 }
 
-IloNum
+void
 SubproblemDual::solve(const IloNumArray &a, const IloNumArray &b)
 {
     // Atualiza a função objetivo
@@ -102,6 +101,6 @@ SubproblemDual::solve(const IloNumArray &a, const IloNumArray &b)
     for (int k = 0; k < inst.nK; ++k)
         rhs += inst.r[k] * cplex.getValue(var_m2[k]);
 
-    opt = IloScalProd(inst.f, a) + IloScalProd(inst.g, b) + theta;
-    return opt;
+    // Calcula o custo do problema original
+    update_opt(a, b);
 }

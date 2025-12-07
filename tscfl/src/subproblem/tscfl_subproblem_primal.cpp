@@ -45,6 +45,7 @@ SubproblemPrimal::~SubproblemPrimal()
 void
 SubproblemPrimal::build_base_model()
 {
+    // RESTRIÇÕES DO SUBPROBLEMA PRIMAL
     // Capacidade das plantas
     for (int i = 0; i < inst.nI; ++i)
         {
@@ -91,7 +92,7 @@ SubproblemPrimal::update_model(const IloNumArray &a, const IloNumArray &b)
         constr_l2[j].setBounds(-IloInfinity, inst.q[j] * b[j]);
 }
 
-IloNum
+void
 SubproblemPrimal::solve(const IloNumArray &a, const IloNumArray &b)
 {
     // Atualiza as restrições dependentes de (a,b)
@@ -125,6 +126,6 @@ SubproblemPrimal::solve(const IloNumArray &a, const IloNumArray &b)
     l2.end();
     m2.end();
 
-    opt = IloScalProd(inst.f, a) + IloScalProd(inst.g, b) + theta;
-    return opt;
+    // Calcula o custo do problema original
+    update_opt(a, b);
 }
