@@ -17,10 +17,10 @@ LRPBalance::LRPBalance(const TSCFLInstance &inst_)
       g1(env, inst_.nK),
       g2(env, inst_.nJ)
 {
-    fill_zero(m1);
-    fill_zero(m2);
-    fill_zero(g1);
-    fill_zero(g2);
+    fillZero(m1);
+    fillZero(m2);
+    fillZero(g1);
+    fillZero(g2);
 }
 
 void
@@ -31,8 +31,8 @@ LRPBalance::solve()
     const IloInt nK = inst.nK;
 
     // Zera fluxos e atualiza custos induzidos pelos cortes
-    fill_zero(x);
-    fill_zero(y);
+    fillZero(x);
+    fillZero(y);
     cuts.update_costs();
 
     // Subproblema das plantas (x, a)

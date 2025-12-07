@@ -13,11 +13,11 @@ Gabriel Braun, 2025
 // SOLVER TSCFL: Relaxação LP com CPLEX
 class TSCFLSolverLP
 {
-protected:
+  protected:
     IloEnv &env;
     const TSCFLInstance &inst;
 
-private:
+  private:
     IloModel model;
     IloCplex cplex;
 
@@ -26,11 +26,11 @@ private:
     IloNumVarMatrix var_x; // x[i][j]
     IloNumVarMatrix var_y; // y[j][k]
 
-public:
+  public:
     // Resultados:
-    IloNum opt{0.0};
-    IloNum time{0.0};
-    IloAlgorithm::Status status{IloAlgorithm::Unknown};
+    IloNum opt{ 0.0 };
+    IloNum time{ 0.0 };
+    IloAlgorithm::Status status{ IloAlgorithm::Unknown };
 
     explicit TSCFLSolverLP(const TSCFLInstance &inst_)
         : env(inst_.env),
@@ -42,7 +42,7 @@ public:
           var_x(inst_.env, inst_.nI, inst_.nJ),
           var_y(inst_.env, inst_.nJ, inst_.nK)
     {
-        build_model();
+        buildModel();
         cplex.extract(model);
 
         // Parâmetros CPLEX
@@ -59,8 +59,9 @@ public:
         model.end();
     }
 
-private:
-    void build_model()
+  private:
+    void
+    buildModel()
     {
         // RESTRIÇÕES
         // Capacidade das plantas
@@ -99,20 +100,21 @@ private:
         obj_expr.end();
     }
 
-public:
-    bool solve(bool log_output = true, double time_limit = -1.0)
+  public:
+    bool
+    solve(bool log_output = true, double time_limit = -1.0)
     {
         // Controle de log
         if (log_output)
-        {
-            cplex.setOut(env.out());
-            cplex.setWarning(env.out());
-        }
+            {
+                cplex.setOut(env.out());
+                cplex.setWarning(env.out());
+            }
         else
-        {
-            cplex.setOut(env.getNullStream());
-            cplex.setWarning(env.getNullStream());
-        }
+            {
+                cplex.setOut(env.getNullStream());
+                cplex.setWarning(env.getNullStream());
+            }
 
         if (time_limit > 0.0)
             cplex.setParam(IloCplex::Param::TimeLimit, time_limit);
@@ -125,14 +127,14 @@ public:
         time = cplex.getTime();
 
         if (ok)
-        {
-            opt = cplex.getObjValue();
-            std::cerr << "\n[LP] OPT = " << opt << "\n";
-        }
+            {
+                opt = cplex.getObjValue();
+                std::cerr << "\n[LP] OPT = " << opt << "\n";
+            }
         else
-        {
-            std::cerr << "\n[LP] Sem solução. status = " << status << "\n";
-        }
+            {
+                std::cerr << "\n[LP] Sem solução. status = " << status << "\n";
+            }
 
         return ok;
     }

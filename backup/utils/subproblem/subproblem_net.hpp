@@ -15,7 +15,7 @@ Gabriel Braun, 2025
 // SOLVER DO SUBPROBLEMA: Fluxo mínimo em rede.
 class SubproblemNet : public Subproblem
 {
-private:
+  private:
     int status;
     CPXENVptr env;
     CPXNETptr net;
@@ -30,7 +30,7 @@ private:
     std::vector<int> arcPlantCap; // arco s -> plant_i
     std::vector<int> arcDepotCap; // arco depotIn_j -> depotOut_j
 
-public:
+  public:
     explicit SubproblemNet(const TSCFLInstance &inst_)
         : Subproblem(inst_),
           status(0),
@@ -49,13 +49,13 @@ public:
 
         net = CPXNETcreateprob(env, &status, "tscfl_net");
         if (status)
-        {
-            CPXcloseCPLEX(&env);
-            env = nullptr;
-            throw std::runtime_error("SubproblemNet: falha em CPXNETcreateprob.");
-        }
+            {
+                CPXcloseCPLEX(&env);
+                env = nullptr;
+                throw std::runtime_error("SubproblemNet: falha em CPXNETcreateprob.");
+            }
 
-        build_base_net();
+        buildBaseNet();
 
         // Subproblema silencioso por padrão
         CPXsetintparam(env, CPXPARAM_ScreenOutput, CPX_OFF);
@@ -64,19 +64,20 @@ public:
     ~SubproblemNet() override
     {
         if (env != nullptr)
-        {
-            if (net != nullptr)
             {
-                CPXNETfreeprob(env, &net);
+                if (net != nullptr)
+                    {
+                        CPXNETfreeprob(env, &net);
+                    }
+                CPXcloseCPLEX(&env);
+                env = nullptr;
             }
-            CPXcloseCPLEX(&env);
-            env = nullptr;
-        }
     }
 
-private:
+  private:
     // Constrói a rede base
-    void build_base_net()
+    void
+    buildBaseNet()
     {
         const int nI = inst.nI;
         const int nJ = inst.nJ;
@@ -93,17 +94,13 @@ private:
         node_s = 0;
         node_t = nN - 1;
 
-        auto nodePlant = [nI](int i)
-        { return 1 + i; };
+        auto nodePlant = [nI](int i) { return 1 + i; };
 
-        auto nodeDepotIn = [nI](int j)
-        { return 1 + nI + j; };
+        auto nodeDepotIn = [nI](int j) { return 1 + nI + j; };
 
-        auto nodeDepotOut = [nI, nJ](int j)
-        { return 1 + nI + nJ + j; };
+        auto nodeDepotOut = [nI, nJ](int j) { return 1 + nI + nJ + j; };
 
-        auto nodeCust = [nI, nJ](int k)
-        { return 1 + nI + 2 * nJ + k; };
+        auto nodeCust = [nI, nJ](int k) { return 1 + nI + 2 * nJ + k; };
 
         // Contagem de arcos:
         //   s -> plant:           (nI)
@@ -129,106 +126,108 @@ private:
 
         // 2.1) Arcos s -> plant_i (capacidade p_i * a_i, custo 0)
         for (int i = 0; i < nI; ++i)
-        {
-            int u = node_s;
-            int v = nodePlant(i);
+            {
+                int u = node_s;
+                int v = nodePlant(i);
 
-            from[arcId] = u;
-            to[arcId] = v;
-            lb[arcId] = 0.0;
-            ub[arcId] = 0.0; // será atualizado em set_capacities()
-            cost[arcId] = 0.0;
+                from[arcId] = u;
+                to[arcId] = v;
+                lb[arcId] = 0.0;
+                ub[arcId] = 0.0; // será atualizado em set_capacities()
+                cost[arcId] = 0.0;
 
-            arcPlantCap[i] = arcId;
-            ++arcId;
-        }
+                arcPlantCap[i] = arcId;
+                ++arcId;
+            }
         // 2.2) Arcos plant_i -> depotIn_j (custo c_ij, cap = +inf)
         for (int i = 0; i < nI; ++i)
-        {
-            int u = nodePlant(i);
-            for (int j = 0; j < nJ; ++j)
             {
-                int v = nodeDepotIn(j);
+                int u = nodePlant(i);
+                for (int j = 0; j < nJ; ++j)
+                    {
+                        int v = nodeDepotIn(j);
 
-                from[arcId] = u;
-                to[arcId] = v;
-                lb[arcId] = 0.0;
-                ub[arcId] = CPX_INFBOUND;
-                cost[arcId] = inst.c[i][j];
+                        from[arcId] = u;
+                        to[arcId] = v;
+                        lb[arcId] = 0.0;
+                        ub[arcId] = CPX_INFBOUND;
+                        cost[arcId] = inst.c[i][j];
 
-                ++arcId;
+                        ++arcId;
+                    }
             }
-        }
         // 2.3) Arcos depotIn_j -> depotOut_j (capacidade q_j * b_j, custo 0)
         for (int j = 0; j < nJ; ++j)
-        {
-            int u = nodeDepotIn(j);
-            int v = nodeDepotOut(j);
-
-            from[arcId] = u;
-            to[arcId] = v;
-            lb[arcId] = 0.0;
-            ub[arcId] = 0.0; // será atualizado em set_capacities()
-            cost[arcId] = 0.0;
-
-            arcDepotCap[j] = arcId;
-            ++arcId;
-        }
-        // 2.4) Arcos depotOut_j -> cust_k (custo d_jk, cap = +inf)
-        for (int j = 0; j < nJ; ++j)
-        {
-            int u = nodeDepotOut(j);
-            for (int k = 0; k < nK; ++k)
             {
-                int v = nodeCust(k);
+                int u = nodeDepotIn(j);
+                int v = nodeDepotOut(j);
 
                 from[arcId] = u;
                 to[arcId] = v;
                 lb[arcId] = 0.0;
-                ub[arcId] = CPX_INFBOUND;
-                cost[arcId] = inst.d[j][k];
+                ub[arcId] = 0.0; // será atualizado em set_capacities()
+                cost[arcId] = 0.0;
+
+                arcDepotCap[j] = arcId;
+                ++arcId;
+            }
+        // 2.4) Arcos depotOut_j -> cust_k (custo d_jk, cap = +inf)
+        for (int j = 0; j < nJ; ++j)
+            {
+                int u = nodeDepotOut(j);
+                for (int k = 0; k < nK; ++k)
+                    {
+                        int v = nodeCust(k);
+
+                        from[arcId] = u;
+                        to[arcId] = v;
+                        lb[arcId] = 0.0;
+                        ub[arcId] = CPX_INFBOUND;
+                        cost[arcId] = inst.d[j][k];
+
+                        ++arcId;
+                    }
+            }
+        // 2.5) Arcos cust_k -> t (capacidade r_k, custo 0)
+        for (int k = 0; k < nK; ++k)
+            {
+                int u = nodeCust(k);
+                int v = node_t;
+
+                from[arcId] = u;
+                to[arcId] = v;
+                lb[arcId] = 0.0;
+                ub[arcId] = inst.r[k];
+                cost[arcId] = 0.0;
 
                 ++arcId;
             }
-        }
-        // 2.5) Arcos cust_k -> t (capacidade r_k, custo 0)
-        for (int k = 0; k < nK; ++k)
-        {
-            int u = nodeCust(k);
-            int v = node_t;
-
-            from[arcId] = u;
-            to[arcId] = v;
-            lb[arcId] = 0.0;
-            ub[arcId] = inst.r[k];
-            cost[arcId] = 0.0;
-
-            ++arcId;
-        }
 
         // 2.6) Adiciona nós e arcos no CPXNET
         status = CPXNETaddnodes(env, net, nN, supply.data(), nullptr);
         if (status)
-        {
-            CPXNETfreeprob(env, &net);
-            CPXcloseCPLEX(&env);
-            env = nullptr;
-            throw std::runtime_error("SubproblemNet: falha em CPXNETaddnodes.");
-        }
+            {
+                CPXNETfreeprob(env, &net);
+                CPXcloseCPLEX(&env);
+                env = nullptr;
+                throw std::runtime_error("SubproblemNet: falha em CPXNETaddnodes.");
+            }
 
         status = CPXNETaddarcs(
-            env, net, nA, from.data(), to.data(), lb.data(), ub.data(), cost.data(), nullptr);
+            env, net, nA, from.data(), to.data(), lb.data(), ub.data(), cost.data(), nullptr
+        );
         if (status)
-        {
-            CPXNETfreeprob(env, &net);
-            CPXcloseCPLEX(&env);
-            env = nullptr;
-            throw std::runtime_error("SubproblemNet: falha em CPXNETaddarcs.");
-        }
+            {
+                CPXNETfreeprob(env, &net);
+                CPXcloseCPLEX(&env);
+                env = nullptr;
+                throw std::runtime_error("SubproblemNet: falha em CPXNETaddarcs.");
+            }
     }
 
     // Atualiza as capacidades dos arcos que dependem de (a,b):
-    void set_capacities(const IloNumArray &a_vals, const IloNumArray &b_vals)
+    void
+    set_capacities(const IloNumArray &a_vals, const IloNumArray &b_vals)
     {
         const int nI = inst.nI;
         const int nJ = inst.nJ;
@@ -239,25 +238,26 @@ private:
         std::vector<double> bd(cnt);
 
         for (int i = 0; i < nI; ++i)
-        {
-            idx[i] = arcPlantCap[i];
-            bd[i] = inst.p[i] * a_vals[i];
-        }
+            {
+                idx[i] = arcPlantCap[i];
+                bd[i] = inst.p[i] * a_vals[i];
+            }
         for (int j = 0; j < nJ; ++j)
-        {
-            idx[nI + j] = arcDepotCap[j];
-            bd[nI + j] = inst.q[j] * b_vals[j];
-        }
+            {
+                idx[nI + j] = arcDepotCap[j];
+                bd[nI + j] = inst.q[j] * b_vals[j];
+            }
 
         status = CPXNETchgbds(env, net, cnt, idx.data(), lu.data(), bd.data());
         if (status)
             throw std::runtime_error("SubproblemNet: falha em CPXNETchgbds.");
     }
 
-public:
+  public:
     // Dado (a_vals, b_vals) da solução atual do mestre, resolve o subproblema.
     // Atualiza: theta, rhs, coef_a, coef_b
-    void solve(const IloNumArray &a_vals, const IloNumArray &b_vals) override
+    void
+    solve(const IloNumArray &a_vals, const IloNumArray &b_vals) override
     {
         const int nI = inst.nI;
         const int nJ = inst.nJ;
@@ -295,27 +295,26 @@ public:
         //   l2_j  = dj[ arcDepotCap[j] ]
         //   m2_k  = pi_s - pi_cust(k)
         for (int i = 0; i < nI; ++i)
-        {
-            double l1_i = dj[arcPlantCap[i]];
-            coef_a[i] = inst.p[i] * l1_i;
-        }
+            {
+                double l1_i = dj[arcPlantCap[i]];
+                coef_a[i] = inst.p[i] * l1_i;
+            }
 
         for (int j = 0; j < nJ; ++j)
-        {
-            double l2_j = dj[arcDepotCap[j]];
-            coef_b[j] = inst.q[j] * l2_j;
-        }
+            {
+                double l2_j = dj[arcDepotCap[j]];
+                coef_b[j] = inst.q[j] * l2_j;
+            }
 
-        auto nodeCust = [nI, nJ](int k)
-        { return 1 + nI + 2 * nJ + k; };
+        auto nodeCust = [nI, nJ](int k) { return 1 + nI + 2 * nJ + k; };
 
         double pi_s = pi[node_s];
         rhs = 0.0;
         for (int k = 0; k < nK; ++k)
-        {
-            int node_k = nodeCust(k);
-            double m2_k = pi_s - pi[node_k];
-            rhs += inst.r[k] * m2_k;
-        }
+            {
+                int node_k = nodeCust(k);
+                double m2_k = pi_s - pi[node_k];
+                rhs += inst.r[k] * m2_k;
+            }
     }
 };

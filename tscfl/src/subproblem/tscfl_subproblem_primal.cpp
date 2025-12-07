@@ -22,7 +22,7 @@ SubproblemPrimal::SubproblemPrimal(const TSCFLInstance &inst_)
       constr_m1(env, inst_.nJ),
       constr_m2(env, inst_.nK)
 {
-    build_base_model();
+    buildBaseModel();
     cplex.extract(model);
 
     // Parâmetros do CPLEX (subproblema)
@@ -43,7 +43,7 @@ SubproblemPrimal::~SubproblemPrimal()
 }
 
 void
-SubproblemPrimal::build_base_model()
+SubproblemPrimal::buildBaseModel()
 {
     // RESTRIÇÕES DO SUBPROBLEMA PRIMAL
     // Capacidade das plantas
@@ -81,7 +81,7 @@ SubproblemPrimal::build_base_model()
 }
 
 void
-SubproblemPrimal::update_model(const IloNumArray &a, const IloNumArray &b)
+SubproblemPrimal::updateModel(const IloNumArray &a, const IloNumArray &b)
 {
     // Capacidade das plantas
     for (int i = 0; i < inst.nI; ++i)
@@ -96,7 +96,7 @@ void
 SubproblemPrimal::solve(const IloNumArray &a, const IloNumArray &b)
 {
     // Atualiza as restrições dependentes de (a,b)
-    update_model(a, b);
+    updateModel(a, b);
 
     // Resolve o LP primal
     if (!cplex.solve())
@@ -127,5 +127,5 @@ SubproblemPrimal::solve(const IloNumArray &a, const IloNumArray &b)
     m2.end();
 
     // Calcula o custo do problema original
-    update_opt(a, b);
+    opt = IloScalProd(inst.f, a) + IloScalProd(inst.g, b) + theta;
 }

@@ -42,19 +42,12 @@ Subproblem::create(const TSCFLInstance &inst, Mode mode)
 }
 
 void
-Subproblem::update_opt(const IloNumArray &a, const IloNumArray &b)
-{
-    IloNum fixed_cost = IloScalProd(inst.f, a) + IloScalProd(inst.g, b);
-    opt = fixed_cost + theta;
-}
-
-void
-Subproblem::solve_primal_heuristic(
+Subproblem::solveHeuristic(
     const IloNumArray &a_frac, const IloNumArray &b_frac, IloNumArray &a_int, IloNumArray &b_int
 )
 {
-    fill_zero(a_int);
-    fill_zero(b_int);
+    fillZero(a_int);
+    fillZero(b_int);
 
     IloNum demand_sum = IloSum(inst.r);
 
@@ -119,7 +112,7 @@ Subproblem::solve_primal_heuristic(
 }
 
 void
-Subproblem::solve_primal_heuristic(
+Subproblem::solveHeuristic(
     const IloCplex &cpx,
     const IloNumVarArray &var_a,
     const IloNumVarArray &var_b,
@@ -133,5 +126,5 @@ Subproblem::solve_primal_heuristic(
     cpx.getValues(a_frac, var_a);
     cpx.getValues(b_frac, var_b);
 
-    solve_primal_heuristic(a_frac, b_frac, a_int, b_int);
+    solveHeuristic(a_frac, b_frac, a_int, b_int);
 }

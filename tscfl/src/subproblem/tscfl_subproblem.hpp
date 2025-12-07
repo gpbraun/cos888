@@ -40,28 +40,24 @@ class Subproblem
 
     virtual ~Subproblem() = default;
 
-    // Factory: cria implementação concreta a partir do modo
+    // Factory: cria implementação concreta a partir do modo.
     static std::unique_ptr<Subproblem> create(const TSCFLInstance &inst, Mode mode);
 
-    // Atualiza: opt
-    void update_opt(const IloNumArray &a, const IloNumArray &b);
-
     // Dado (a_vals, b_vals) da solução atual do mestre, resolve o subproblema.
-    // Atualiza: theta, rhs, coef_a, coef_b
-    // Retorna: valor da solução primal
+    // Atualiza: opt, theta, rhs, coef_a, coef_b
     virtual void solve(const IloNumArray &a, const IloNumArray &b) = 0;
 
-    // Heurística primal:
+    // Heurística primal.
     // Dado (a_frac, b_frac), encontra (a_int e b_int) e resolve o subproblema.
-    // Atualiza: theta, rhs, coef_a, coef_b
-    // Retorna: valor da solução primal
-    void solve_primal_heuristic(
+    // Atualiza: opt, theta, rhs, coef_a, coef_b
+    void solveHeuristic(
         const IloNumArray &a_frac, const IloNumArray &b_frac, IloNumArray &a_int, IloNumArray &b_int
     );
 
-    // Heurística primal:
-    // Lê (a,b) fracionários direto do modelo (var_a, var_b) e chama a função acima.
-    void solve_primal_heuristic(
+    // Heurística primal.
+    // Dado (a_frac, b_frac), encontra (a_int e b_int) e resolve o subproblema.
+    // Atualiza: opt, theta, rhs, coef_a, coef_b
+    void solveHeuristic(
         const IloCplex &cpx,
         const IloNumVarArray &var_a,
         const IloNumVarArray &var_b,

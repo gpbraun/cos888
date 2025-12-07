@@ -28,9 +28,6 @@ class TSCFLSolverSubgradient : public TSCFLSolver
     std::unique_ptr<LRP> relaxation;
     std::unique_ptr<Subproblem> subproblem;
 
-    IloNumArray a; // melhor a[i]
-    IloNumArray b; // melhor b[j]
-
   public:
     explicit TSCFLSolverSubgradient(
         const TSCFLInstance &inst_,
@@ -38,5 +35,5 @@ class TSCFLSolverSubgradient : public TSCFLSolver
         Subproblem::Mode smode = Subproblem::Mode::NET
     );
 
-    bool solve(bool log_output = true, IloNum time_limit = -1.0) override;
+    void solve(bool log_output = true, IloNum time_limit = -1.0) override;
 };

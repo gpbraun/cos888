@@ -37,5 +37,5 @@ class TSCFLInstance
     TSCFLInstance(IloEnv &env_, int _nI, int _nJ, int _nK);
 
     // Carrega instância a partir de arquivo `.txt`.
-    static TSCFLInstance from_txt(IloEnv &env, const std::string &path);
+    static TSCFLInstance read(IloEnv &env, const std::string &path);
 };

@@ -31,10 +31,10 @@ class SubproblemNet : public Subproblem
     CPXNETptr net;
 
     // Parâmetros da rede
-    int nN;
-    int nA;
-    int node_s; // nó origem (super‐source)
-    int node_t; // nó destino (super‐sink)
+    int nN{ 0 };
+    int nA{ 0 };
+    int node_s{ -1 }; // nó origem
+    int node_t{ -1 }; // nó destino
 
     // Índices de arcos de capacidade que geram l1 e l2
     std::vector<int> arcPlantCap; // arco s -> plant_i
@@ -47,12 +47,12 @@ class SubproblemNet : public Subproblem
 
     // Dado (a_vals, b_vals) da solução atual do mestre, resolve o subproblema.
     // Atualiza: theta, rhs, coef_a, coef_b
-    void solve(const IloNumArray &a_vals, const IloNumArray &b_vals) override;
+    void solve(const IloNumArray &a, const IloNumArray &b) override;
 
   private:
     // Constrói a rede base
-    void build_base_net();
+    void buildNet();
 
     // Atualiza as capacidades dos arcos que dependem de (a,b)
-    void update_net(const IloNumArray &a_vals, const IloNumArray &b_vals);
+    void updateNet(const IloNumArray &a, const IloNumArray &b);
 };

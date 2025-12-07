@@ -321,10 +321,10 @@ CutManager::update_multipliers(IloNum step)
 void
 CutManager::update_costs()
 {
-    fill_zero(cost_x);
-    fill_zero(cost_y);
-    fill_zero(cost_a);
-    fill_zero(cost_b);
+    fillZero(cost_x);
+    fillZero(cost_y);
+    fillZero(cost_a);
+    fillZero(cost_b);
 
     for (const auto &c : cuts)
         {
@@ -335,7 +335,7 @@ CutManager::update_costs()
 }
 
 void
-CutManager::update_status(
+CutManager::updateStatus(
     const IloNumMatrix &x_lr,
     const IloNumMatrix &y_lr,
     const IloNumArray &a_lr,

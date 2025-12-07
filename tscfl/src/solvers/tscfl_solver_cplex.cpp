@@ -20,7 +20,7 @@ TSCFLSolverCplex::TSCFLSolverCplex(const TSCFLInstance &inst_)
       var_x(env, inst.nI, inst.nJ),
       var_y(env, inst.nJ, inst.nK)
 {
-    build_model();
+    buildModel();
     cplex.extract(model);
 
     // Parâmetros CPLEX
@@ -42,7 +42,7 @@ TSCFLSolverCplex::~TSCFLSolverCplex()
 }
 
 void
-TSCFLSolverCplex::build_model()
+TSCFLSolverCplex::buildModel()
 {
     // Capacidade das plantas
     for (int i = 0; i < inst.nI; ++i)
@@ -60,15 +60,6 @@ TSCFLSolverCplex::build_model()
     for (int k = 0; k < inst.nK; ++k)
         model.add(IloSum(var_y.col(k)) == inst.r[k]);
 
-    // Capacidade agregada (viabilidade extra)
-    for (int i = 0; i < inst.nI; ++i)
-        for (int j = 0; j < inst.nJ; ++j)
-            model.add(var_x[i][j] <= inst.q[j] * var_b[j]);
-
-    for (int j = 0; j < inst.nJ; ++j)
-        for (int k = 0; k < inst.nK; ++k)
-            model.add(var_y[j][k] <= inst.r[k] * var_b[j]);
-
     // Função objetivo
     IloExpr obj_expr(env);
 
@@ -80,7 +71,7 @@ TSCFLSolverCplex::build_model()
     obj_expr.end();
 }
 
-bool
+void
 TSCFLSolverCplex::solve(bool log_output, double time_limit)
 {
     // Controle de log
@@ -98,22 +89,19 @@ TSCFLSolverCplex::solve(bool log_output, double time_limit)
     if (time_limit > 0.0)
         cplex.setParam(IloCplex::Param::TimeLimit, time_limit);
 
-    // Resolve
-    bool ok = cplex.solve();
-    status = cplex.getStatus();
-
-    // Estatísticas
-    gap = cplex.getMIPRelativeGap();
-    nodes = cplex.getNnodes64();
-    time = cplex.getTime();
-    if (ok)
+    // Executa o solver
+    if (cplex.solve())
         {
-            ub = cplex.getObjValue();
             lb = cplex.getBestObjValue();
+            ub = cplex.getObjValue();
         }
 
-    // Log final
-    print_summary("CPLEX");
+    // Recuperação das estatísticas
+    gap = cplex.getMIPRelativeGap();
+    time = cplex.getTime();
+    nodes = cplex.getNnodes64();
+    status = cplex.getStatus();
 
-    return (status == IloAlgorithm::Optimal || status == IloAlgorithm::Feasible);
+    // Log final
+    printSummary("CPLEX");
 }

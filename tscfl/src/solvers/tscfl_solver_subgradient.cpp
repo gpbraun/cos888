@@ -17,13 +17,11 @@ TSCFLSolverSubgradient::TSCFLSolverSubgradient(
 )
     : TSCFLSolver(inst_),
       relaxation(LRP::create(inst_, rmode)),
-      subproblem(Subproblem::create(inst_, smode)),
-      a(env, inst_.nI),
-      b(env, inst_.nJ)
+      subproblem(Subproblem::create(inst_, smode))
 {
 }
 
-bool
+void
 TSCFLSolverSubgradient::solve(bool log_output, IloNum time_limit)
 {
     auto &SP = *subproblem;
@@ -113,12 +111,12 @@ TSCFLSolverSubgradient::solve(bool log_output, IloNum time_limit)
                     LR.separate_subset_rows(MAX_NEW_CUTS);
                 }
 
-            cuts.update_status(LR.x, LR.y, LR.a, LR.b, EXTRA_AGE);
+            cuts.updateStatus(LR.x, LR.y, LR.a, LR.b, EXTRA_AGE);
 
             // Heurística primal
             if (iter == 0 || (last_improv_iter == iter) || (iter % SOLVE_HEURISTIC_EVERY == 0))
                 {
-                    SP.solve_primal_heuristic(LR.a, LR.b, a_h, b_h);
+                    SP.solveHeuristic(LR.a, LR.b, a_h, b_h);
 
                     if (SP.opt + EPS < ub)
                         {
@@ -128,7 +126,7 @@ TSCFLSolverSubgradient::solve(bool log_output, IloNum time_limit)
                         }
                 }
 
-            update_gap();
+            updateGap();
 
             // Critério de parada: iterações sem melhora
             if (iter - last_improv_iter >= MAX_NO_IMPROV)
@@ -207,7 +205,5 @@ TSCFLSolverSubgradient::solve(bool log_output, IloNum time_limit)
     timer.stop();
 
     // Log final
-    print_summary("SUBGRADIENTE");
-
-    return (status == IloAlgorithm::Optimal || status == IloAlgorithm::Feasible);
+    printSummary("SUBGRADIENTE");
 }

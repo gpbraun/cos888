@@ -23,10 +23,10 @@ void
 LRPCapacity::solve()
 {
     // Zera fluxos, subgradientes e atualiza custos induzidos pelos cortes
-    fill_zero(x);
-    fill_zero(y);
-    fill_zero(g1);
-    fill_zero(g2);
+    fillZero(x);
+    fillZero(y);
+    fillZero(g1);
+    fillZero(g2);
 
     cuts.update_costs();
 

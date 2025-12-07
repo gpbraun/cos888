@@ -54,6 +54,15 @@ IloMatScalProd(const IloNumMatrix &c, const IloNumMatrix &d)
 }
 
 IloExpr
+IloMatScalProd(const IloNumVarMatrix &x, const IloNumMatrix &c)
+{
+    IloExpr e(x.getEnv());
+    for (IloInt i = 0; i < x.getSize(); ++i)
+        e += IloScalProd(c[i], x[i]);
+    return e;
+}
+
+IloExpr
 IloMatScalProd(const IloNumMatrix &c, const IloNumVarMatrix &x)
 {
     IloExpr e(x.getEnv());
@@ -63,15 +72,15 @@ IloMatScalProd(const IloNumMatrix &c, const IloNumVarMatrix &x)
 }
 
 void
-fill_zero(IloNumArray &a)
+fillZero(IloNumArray &a)
 {
     for (IloInt i = 0; i < a.getSize(); ++i)
         a[i] = 0.0;
 }
 
 void
-fill_zero(IloNumMatrix &M)
+fillZero(IloNumMatrix &M)
 {
     for (IloInt i = 0; i < M.getSize(); ++i)
-        fill_zero(M[i]);
+        fillZero(M[i]);
 }

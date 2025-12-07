@@ -24,9 +24,7 @@ TSCFLSolverColumnGeneration::TSCFLSolverColumnGeneration(
       constr_l1(env, inst_.nI),
       constr_l2(env, inst_.nJ),
       constr_m2(env, inst_.nK),
-      constrs_v(env, inst_.nJ),
-      a(env, inst_.nI),
-      b(env, inst_.nJ)
+      constrs_v(env, inst_.nJ)
 {
     // Inicializa vetores de colunas e infos
     z.resize(inst.nK);
@@ -43,7 +41,7 @@ TSCFLSolverColumnGeneration::TSCFLSolverColumnGeneration(
             constrs_v[j] = IloRangeArray(env, inst.nK);
         }
 
-    build_initial_model();
+    buildModel();
     cplex.extract(model);
 
     // Parâmetros do CPLEX (RMP)
@@ -64,7 +62,7 @@ TSCFLSolverColumnGeneration::~TSCFLSolverColumnGeneration()
 }
 
 void
-TSCFLSolverColumnGeneration::build_initial_model()
+TSCFLSolverColumnGeneration::buildModel()
 {
     // RESTRIÇÕES DO RMP
     // Restrições de capacidade das plantas: constr_l1[i]
@@ -98,16 +96,14 @@ TSCFLSolverColumnGeneration::build_initial_model()
 
     // Restrição de vínculo: z_{k,t} <= b_j  (para par (j,k))
     for (IloInt j = 0; j < inst.nJ; ++j)
-        {
-            for (IloInt k = 0; k < inst.nK; ++k)
-                {
-                    IloExpr e(env);
-                    e -= var_b[j];
-                    constrs_v[j][k] = (e <= 0.0);
-                    model.add(constrs_v[j][k]);
-                    e.end();
-                }
-        }
+        for (IloInt k = 0; k < inst.nK; ++k)
+            {
+                IloExpr e(env);
+                e -= var_b[j];
+                constrs_v[j][k] = (e <= 0.0);
+                model.add(constrs_v[j][k]);
+                e.end();
+            }
 
     // FUNÇÃO OBJETIVO
     obj = IloMinimize(env, IloScalProd(inst.f, var_a) + IloScalProd(inst.g, var_b));
@@ -168,15 +164,15 @@ TSCFLSolverColumnGeneration::build_initial_model()
             for (IloInt j = 0; j < inst.nJ; ++j)
                 {
                     if (flow[i][j][k] > EPS)
-                        add_column_for_client(k, i, j);
+                        addColumn(k, i, j);
                     // Fallback:
                     if (z[k].getSize() == 0)
-                        add_column_for_client(k, 0, 0);
+                        addColumn(k, 0, 0);
                 }
 }
 
 void
-TSCFLSolverColumnGeneration::add_column_for_client(int k, int i, int j)
+TSCFLSolverColumnGeneration::addColumn(int k, int i, int j)
 {
     col_info[k].push_back({ i, j });
 
@@ -205,7 +201,7 @@ TSCFLSolverColumnGeneration::add_column_for_client(int k, int i, int j)
 }
 
 IloInt
-TSCFLSolverColumnGeneration::get_num_columns() const
+TSCFLSolverColumnGeneration::getNumColumns() const
 {
     IloInt total = 0;
     for (IloInt k = 0; k < inst.nK; ++k)
@@ -215,7 +211,7 @@ TSCFLSolverColumnGeneration::get_num_columns() const
     return total;
 }
 
-bool
+void
 TSCFLSolverColumnGeneration::solve(bool log_output, IloNum time_limit)
 {
     auto &SP = *subproblem;
@@ -270,15 +266,14 @@ TSCFLSolverColumnGeneration::solve(bool log_output, IloNum time_limit)
             if (!cplex.solve())
                 {
                     status = cplex.getStatus();
-                    std::cerr << "[CG] RMP inviável ou erro. Status = " << status << "\n";
-                    return false;
+                    break;
                 }
 
             status = cplex.getStatus();
             lb = cplex.getObjValue();
 
             // Heurística primal a partir de (a,b) fracionários do RMP
-            SP.solve_primal_heuristic(cplex, var_a, var_b, a_h, b_h);
+            SP.solveHeuristic(cplex, var_a, var_b, a_h, b_h);
 
             if (SP.opt + EPS < ub)
                 {
@@ -287,7 +282,7 @@ TSCFLSolverColumnGeneration::solve(bool log_output, IloNum time_limit)
                     b = b_h;
                 }
 
-            update_gap();
+            updateGap();
 
             // Recuperação das variáveis duais
             cplex.getDuals(l1, constr_l1);
@@ -322,7 +317,7 @@ TSCFLSolverColumnGeneration::solve(bool log_output, IloNum time_limit)
 
                     if (best_i != -1)
                         {
-                            add_column_for_client(k, best_i, best_j);
+                            addColumn(k, best_i, best_j);
                             any_new = true;
                         }
                 }
@@ -330,7 +325,7 @@ TSCFLSolverColumnGeneration::solve(bool log_output, IloNum time_limit)
             // Log parcial
             if (log_output && (iter % PRINT_EVERY == 0 || !any_new))
                 {
-                    IloInt num_columns = get_num_columns();
+                    IloInt num_columns = getNumColumns();
 
                     std::cout << std::right << std::setw(5)
                               << iter
@@ -367,7 +362,5 @@ TSCFLSolverColumnGeneration::solve(bool log_output, IloNum time_limit)
     timer.stop();
 
     // Log final
-    print_summary("GERAÇÃO DE COLUNAS");
-
-    return (status == IloAlgorithm::Optimal || status == IloAlgorithm::Feasible);
+    printSummary("GERAÇÃO DE COLUNAS");
 }

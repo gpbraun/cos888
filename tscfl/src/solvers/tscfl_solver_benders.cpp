@@ -248,7 +248,7 @@ TSCFLSolverBenders::TSCFLSolverBenders(const TSCFLInstance &inst_, Subproblem::M
       var_b(env, inst.nJ),
       var_eta(env, 0.0, IloInfinity)
 {
-    build_model();
+    buildModel();
     cplex.extract(model);
 
     // Parâmetros CPLEX (mestre)
@@ -266,7 +266,7 @@ TSCFLSolverBenders::~TSCFLSolverBenders()
 }
 
 void
-TSCFLSolverBenders::build_model()
+TSCFLSolverBenders::buildModel()
 {
     // Capacidade agregada (garante viabilidade do subproblema)
     double demand_sum = IloSum(inst.r);
@@ -280,7 +280,7 @@ TSCFLSolverBenders::build_model()
     model.add(obj);
 }
 
-bool
+void
 TSCFLSolverBenders::solve(bool log_output, double time_limit)
 {
     // Controle de log
@@ -302,22 +302,19 @@ TSCFLSolverBenders::solve(bool log_output, double time_limit)
     cplex.use(new (env) LazyBendersCallbackI(inst, *subproblem, var_a, var_b, var_eta));
     cplex.use(new (env) UserBendersCallbackI(inst, *subproblem, var_a, var_b, var_eta));
 
-    // Solve
-    IloBool ok = cplex.solve();
-    status = cplex.getStatus();
-
-    // Estatísticas
-    gap = cplex.getMIPRelativeGap();
-    nodes = cplex.getNnodes64();
-    time = cplex.getTime();
-    if (ok)
+    // Executa o solver
+    if (cplex.solve())
         {
-            ub = cplex.getObjValue();
             lb = cplex.getBestObjValue();
+            ub = cplex.getObjValue();
         }
 
-    // Log final
-    print_summary("BENDERS");
+    // Recuperação das estatísticas
+    gap = cplex.getMIPRelativeGap();
+    time = cplex.getTime();
+    nodes = cplex.getNnodes64();
+    status = cplex.getStatus();
 
-    return (status == IloAlgorithm::Optimal || status == IloAlgorithm::Feasible);
+    // Log final
+    printSummary("BENDERS");
 }

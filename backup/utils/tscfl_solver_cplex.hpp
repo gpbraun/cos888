@@ -13,11 +13,11 @@ Gabriel Braun, 2025
 // SOLVER TSCFL: CPLEX
 class TSCFLSolverCplex
 {
-protected:
+  protected:
     IloEnv &env;
     const TSCFLInstance &inst;
 
-public:
+  public:
     IloModel model;
     IloCplex cplex;
 
@@ -26,14 +26,14 @@ public:
     IloNumVarMatrix var_x; // x[i][j]
     IloNumVarMatrix var_y; // y[j][k]
 
-public:
+  public:
     // Resultados:
-    IloNum lb{0.0};
-    IloNum ub{IloInfinity};
-    IloNum gap{IloInfinity};
-    IloNum time{0.0};
-    IloInt64 nodes{0};
-    IloAlgorithm::Status status{IloAlgorithm::Unknown};
+    IloNum lb{ 0.0 };
+    IloNum ub{ IloInfinity };
+    IloNum gap{ IloInfinity };
+    IloNum time{ 0.0 };
+    IloInt64 nodes{ 0 };
+    IloAlgorithm::Status status{ IloAlgorithm::Unknown };
 
     explicit TSCFLSolverCplex(const TSCFLInstance &inst_)
         : env(inst_.env),
@@ -45,7 +45,7 @@ public:
           var_x(inst_.env, inst_.nI, inst_.nJ),
           var_y(inst_.env, inst_.nJ, inst_.nK)
     {
-        build_model();
+        buildModel();
         cplex.extract(model);
 
         // Parâmetros CPLEX
@@ -66,8 +66,9 @@ public:
         model.end();
     }
 
-private:
-    void build_model()
+  private:
+    void
+    buildModel()
     {
         // RESTRIÇÕES
         // Capacidade das plantas
@@ -106,20 +107,21 @@ private:
         obj_expr.end();
     }
 
-public:
-    bool solve(bool log_output = true, double time_limit = -1.0)
+  public:
+    bool
+    solve(bool log_output = true, double time_limit = -1.0)
     {
         // Controle de log
         if (log_output)
-        {
-            cplex.setOut(env.out());
-            cplex.setWarning(env.out());
-        }
+            {
+                cplex.setOut(env.out());
+                cplex.setWarning(env.out());
+            }
         else
-        {
-            cplex.setOut(env.getNullStream());
-            cplex.setWarning(env.getNullStream());
-        }
+            {
+                cplex.setOut(env.getNullStream());
+                cplex.setWarning(env.getNullStream());
+            }
 
         if (time_limit > 0.0)
             cplex.setParam(IloCplex::Param::TimeLimit, time_limit);
@@ -134,33 +136,32 @@ public:
         time = cplex.getTime();
 
         if (ok)
-        {
-            ub = cplex.getObjValue();
-            lb = cplex.getBestObjValue();
+            {
+                ub = cplex.getObjValue();
+                lb = cplex.getBestObjValue();
 
-            std::cout
-                << "\n\n"
-                << "[CPLEX] CPLEX finalizado.\n\n"
-                << "status = " << status << "\n"
-                // nodes
-                << std::fixed << std::setprecision(0)
-                << "nodes   = " << nodes << "\n"
-                // tempo
-                << std::fixed << std::setprecision(1)
-                << "time   = " << time << " s\n"
-                // LB, UB
-                << std::fixed << std::setprecision(0)
-                << "LB     = " << lb << "\n"
-                << "UB     = " << ub << "\n"
-                // gap, step, ||g||^2
-                << std::scientific << std::setprecision(2)
-                << "gap    = " << gap << "\n"
-                << std::defaultfloat;
-        }
+                std::cout << "\n\n"
+                          << "[CPLEX] CPLEX finalizado.\n\n"
+                          << "status = " << status
+                          << "\n"
+                          // nodes
+                          << std::fixed << std::setprecision(0) << "nodes   = " << nodes
+                          << "\n"
+                          // tempo
+                          << std::fixed << std::setprecision(1) << "time   = " << time
+                          << " s\n"
+                          // LB, UB
+                          << std::fixed << std::setprecision(0) << "LB     = " << lb << "\n"
+                          << "UB     = " << ub
+                          << "\n"
+                          // gap, step, ||g||^2
+                          << std::scientific << std::setprecision(2) << "gap    = " << gap << "\n"
+                          << std::defaultfloat;
+            }
         else
-        {
-            std::cerr << "\n[BENDERS] Sem solução. status = " << status << "\n";
-        }
+            {
+                std::cerr << "\n[BENDERS] Sem solução. status = " << status << "\n";
+            }
 
         return ok;
     }

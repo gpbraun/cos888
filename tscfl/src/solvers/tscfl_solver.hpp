@@ -16,32 +16,36 @@ Gabriel Braun, 2025
 class TSCFLSolver
 {
   protected:
-    IloEnv &env;
+    const IloEnv &env;
     const TSCFLInstance &inst;
 
   public:
     // Resultados
-    IloNum lb;
-    IloNum ub;
-    IloNum gap;
-    IloNum time;
-    IloInt64 iter;
-    IloInt64 nodes;
-    IloAlgorithm::Status status;
+    IloNumArray a;     // a[i]
+    IloNumArray b;     // b[j]
+    IloNumVarMatrix x; // x[i][j]
+    IloNumVarMatrix y; // y[j][k]
+
+    // Estatísticas
+    IloNum lb{ 0.0 };
+    IloNum ub{ IloInfinity };
+    IloNum gap{ IloInfinity };
+    IloNum time{ 0.0 };
+    IloInt64 iter{ 0 };
+    IloInt64 nodes{ 0 };
+    IloAlgorithm::Status status{ IloAlgorithm::Unknown };
 
     explicit TSCFLSolver(const TSCFLInstance &inst_);
+
     virtual ~TSCFLSolver() = default;
 
-    // Interface comum
-    virtual bool solve(bool log_output = true, double time_limit = -1.0) = 0;
+    // Resolve a instância.
+    virtual void solve(bool log_output = true, double time_limit = -1.0) = 0;
 
   protected:
-    // Atualiza o gap a partir de lb/ub
-    void update_gap();
+    // Atualiza: gap (a partir de lb/ub) e status
+    void updateGap();
 
-    // Atualiza o status se ainda estiver Unknown e tivermos uma solução viável
-    void update_status();
-
-    // Imprime resumo padronizado
-    void print_summary(const char *tag) const;
+    // Imprime: resumo padronizado
+    void printSummary(const char *tag) const;
 };

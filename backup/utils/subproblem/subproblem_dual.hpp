@@ -13,7 +13,7 @@ Gabriel Braun, 2025
 // SOLVER DO SUBPROBLEMA: Dual.
 class SubproblemDual : public Subproblem
 {
-private:
+  private:
     IloEnv env;
     IloModel model;
     IloCplex cplex;
@@ -27,7 +27,7 @@ private:
     // Função objetivo
     IloObjective obj;
 
-public:
+  public:
     explicit SubproblemDual(const TSCFLInstance &inst_)
         : Subproblem(inst_),
           env(),
@@ -39,7 +39,7 @@ public:
           var_m2(env, inst_.nK, -IloInfinity, IloInfinity, ILOFLOAT),
           obj(IloMaximize(env, 0.0))
     {
-        build_base_model();
+        buildBaseModel();
         cplex.extract(model);
 
         // Parâmetros do CPLEX (subproblema)
@@ -59,9 +59,10 @@ public:
         env.end();
     }
 
-private:
+  private:
     // Constrói: modelo base do subproblema dual
-    void build_base_model()
+    void
+    buildBaseModel()
     {
         // RESTRIÇÕES DO SUBPROBLEMA DUAL
         // arcos planta -> depósito
@@ -79,7 +80,8 @@ private:
     }
 
     // Atualiza: função objetivo do subproblema em função de (a,b)
-    void set_objective(const IloNumArray &a_vals, const IloNumArray &b_vals)
+    void
+    set_objective(const IloNumArray &a_vals, const IloNumArray &b_vals)
     {
         IloExpr obj_expr(env);
 
@@ -94,10 +96,11 @@ private:
         obj_expr.end();
     }
 
-public:
+  public:
     // Dado (a_vals, b_vals) da solução atual do mestre, resolve o subproblema.
     // Atualiza: theta, rhs, coef_a, coef_b
-    void solve(const IloNumArray &a_vals, const IloNumArray &b_vals) override
+    void
+    solve(const IloNumArray &a_vals, const IloNumArray &b_vals) override
     {
         // 1) Atualiza a função objetivo
         set_objective(a_vals, b_vals);

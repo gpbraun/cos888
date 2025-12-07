@@ -25,10 +25,10 @@ class TSCFLSolverColumnGeneration : public TSCFLSolver
     std::unique_ptr<Subproblem> subproblem;
 
     // Variáveis do RMP
-    IloNumVarArray var_a; // a[i]
-    IloNumVarArray var_b; // b[j]
+    IloNumVarArray var_a; // var_a[i]
+    IloNumVarArray var_b; // var_b[j]
 
-    // Restrições
+    // Restrições e função objetivo
     IloRangeArray constr_l1;
     IloRangeArray constr_l2;
     IloRangeArray constr_m2;
@@ -36,7 +36,7 @@ class TSCFLSolverColumnGeneration : public TSCFLSolver
 
     IloObjective obj;
 
-    // Colunas (padrões) por cliente
+    // Colunas
     struct ColumnInfo
     {
         int i; // planta
@@ -46,22 +46,18 @@ class TSCFLSolverColumnGeneration : public TSCFLSolver
     std::vector<IloNumVarArray> z;                 // z[k][t]
 
   public:
-    // Melhor solução primal inteira encontrada
-    IloNumArray a;
-    IloNumArray b;
-
     explicit TSCFLSolverColumnGeneration(
         const TSCFLInstance &inst_, Subproblem::Mode smode = Subproblem::Mode::NET
     );
 
     ~TSCFLSolverColumnGeneration() override;
 
-    bool solve(bool log_output = true, IloNum time_limit = -1.0);
+    void solve(bool log_output = true, IloNum time_limit = -1.0);
 
   private:
-    void build_initial_model();
+    void buildModel();
 
-    void add_column_for_client(int k, int i, int j);
+    void addColumn(int k, int i, int j);
 
-    IloInt get_num_columns() const;
+    IloInt getNumColumns() const;
 };

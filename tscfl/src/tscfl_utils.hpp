@@ -16,8 +16,8 @@ ILOSTLBEGIN
 //  CONSTANTES GLOBAIS
 // =====================================================================
 
-inline constexpr double EPS = 1e-4;     // Tolerância numérica
-inline constexpr double MIP_GAP = 1e-7; // Gap mínimo do MIP
+inline constexpr IloNum EPS = 1e-4;     // Tolerância numérica
+inline constexpr IloNum MIP_GAP = 1e-7; // Gap mínimo do MIP
 
 // =====================================================================
 //  TIPOS AUXILIARES
@@ -61,10 +61,13 @@ class IloNumVarMatrix : public IloArray<IloNumVarArray>
 IloNum IloMatScalProd(const IloNumMatrix &c, const IloNumMatrix &d);
 
 // Produto escalar entre matriz de constantes e matriz de variáveis.
+IloExpr IloMatScalProd(const IloNumVarMatrix &x, const IloNumMatrix &c);
+
+// Produto escalar entre matriz de constantes e matriz de variáveis.
 IloExpr IloMatScalProd(const IloNumMatrix &c, const IloNumVarMatrix &x);
 
 // Reseta um array para zero (IloNum).
-void fill_zero(IloNumArray &a);
+void fillZero(IloNumArray &a);
 
 // Reseta uma matriz para zero (IloNum).
-void fill_zero(IloNumMatrix &M);
+void fillZero(IloNumMatrix &M);

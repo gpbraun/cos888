@@ -15,10 +15,6 @@ SubproblemNet::SubproblemNet(const TSCFLInstance &inst_)
       status(0),
       env(nullptr),
       net(nullptr),
-      nN(0),
-      nA(0),
-      node_s(-1),
-      node_t(-1),
       arcPlantCap(inst_.nI),
       arcDepotCap(inst_.nJ)
 {
@@ -34,7 +30,7 @@ SubproblemNet::SubproblemNet(const TSCFLInstance &inst_)
             throw std::runtime_error("SubproblemNet: falha em CPXNETcreateprob.");
         }
 
-    build_base_net();
+    buildNet();
 
     // Subproblema silencioso por padrão
     CPXsetintparam(env, CPXPARAM_ScreenOutput, CPX_OFF);
@@ -54,7 +50,7 @@ SubproblemNet::~SubproblemNet()
 }
 
 void
-SubproblemNet::build_base_net()
+SubproblemNet::buildNet()
 {
     const int nI = inst.nI;
     const int nJ = inst.nJ;
@@ -207,7 +203,7 @@ SubproblemNet::build_base_net()
 }
 
 void
-SubproblemNet::update_net(const IloNumArray &a, const IloNumArray &b)
+SubproblemNet::updateNet(const IloNumArray &a, const IloNumArray &b)
 {
     const int nI = inst.nI;
     const int nJ = inst.nJ;
@@ -241,7 +237,7 @@ SubproblemNet::solve(const IloNumArray &a, const IloNumArray &b)
     const int nK = inst.nK;
 
     // Atualiza capacidades dos arcos dependentes de (a,b)
-    update_net(a, b);
+    updateNet(a, b);
 
     // Resolve o problema de fluxo mínimo
     status = CPXNETprimopt(env, net);
@@ -295,5 +291,5 @@ SubproblemNet::solve(const IloNumArray &a, const IloNumArray &b)
         }
 
     // Calcula o custo do problema original
-    update_opt(a, b);
+    opt = IloScalProd(inst.f, a) + IloScalProd(inst.g, b) + theta;
 }

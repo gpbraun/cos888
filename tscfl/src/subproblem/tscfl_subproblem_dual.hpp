@@ -19,26 +19,27 @@ class SubproblemDual : public Subproblem
     IloCplex cplex;
 
     // Variáveis duais
-    IloNumVarArray var_l1; // l1[i] >= 0
-    IloNumVarArray var_l2; // l2[j] >= 0
-    IloNumVarArray var_m1; // m1[j] livre
-    IloNumVarArray var_m2; // m2[k] livre
+    IloNumVarArray var_l1; // var_l1[i] <= 0
+    IloNumVarArray var_l2; // var_l2[j] <= 0
+    IloNumVarArray var_m1; // var_m1[j] livre
+    IloNumVarArray var_m2; // var_m2[k] livre
 
     // Função objetivo
     IloObjective obj;
 
   public:
     explicit SubproblemDual(const TSCFLInstance &inst_);
+
     ~SubproblemDual() override;
 
     // Dado (a_vals, b_vals) da solução atual do mestre, resolve o subproblema.
     // Atualiza: theta, rhs, coef_a, coef_b
-    void solve(const IloNumArray &a_vals, const IloNumArray &b_vals) override;
+    void solve(const IloNumArray &a, const IloNumArray &b) override;
 
   private:
     // Constrói: modelo base do subproblema dual
-    void build_base_model();
+    void buildModel();
 
     // Atualiza: função objetivo do subproblema em função de (a,b)
-    void update_model(const IloNumArray &a_vals, const IloNumArray &b_vals);
+    void updateModel(const IloNumArray &a, const IloNumArray &b);
 };

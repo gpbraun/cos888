@@ -42,7 +42,7 @@ class SSCFLInstance:
         return list(product(self.I, self.J))
 
     @classmethod
-    def from_txt(cls, path: Path | str) -> "SSCFLInstance":
+    def read(cls, path: Path | str) -> "SSCFLInstance":
         """
         Retorna: Instância SSCFL a partir de um arquivo `.txt`.
         """
@@ -69,4 +69,4 @@ class SSCFLInstance:
         """
         Retorna: Instância SSCFL a partir de um arquivo `.txt` no diretório padrão.
         """
-        return cls.from_txt(INSTANCES_DIR.joinpath(name).with_suffix(".txt"))
+        return cls.read(INSTANCES_DIR.joinpath(name).with_suffix(".txt"))

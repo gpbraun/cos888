@@ -5,7 +5,7 @@ main()
 {
     IloEnv env;
 
-    auto inst = TSCFLInstance::from_txt(env, "tscfl/data/fernandes/tscfl_050_100_200_a.txt");
+    auto inst = TSCFLInstance::read(env, "tscfl/data/fernandes/tscfl_050_100_200_a.txt");
 
     TSCFLSolverBenders solver_benders(inst, Subproblem::Mode::NET);
     solver_benders.solve(true, 10.0);

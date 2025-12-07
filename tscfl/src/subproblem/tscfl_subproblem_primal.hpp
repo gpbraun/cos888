@@ -18,9 +18,9 @@ class SubproblemPrimal : public Subproblem
     IloModel model;
     IloCplex cplex;
 
-    // Variáveis de fluxo
-    IloNumVarMatrix var_x; // x[i][j]
-    IloNumVarMatrix var_y; // y[j][k]
+    // Variáveis
+    IloNumVarMatrix var_x; // var_x[i][j]
+    IloNumVarMatrix var_y; // var_y[j][k]
 
     // Restrições
     IloRangeArray constr_l1; // constr_l1[i]
@@ -30,6 +30,7 @@ class SubproblemPrimal : public Subproblem
 
   public:
     explicit SubproblemPrimal(const TSCFLInstance &inst_);
+
     ~SubproblemPrimal() override;
 
     // Dado (a_vals, b_vals) da solução atual do mestre, resolve o subproblema.
@@ -38,8 +39,8 @@ class SubproblemPrimal : public Subproblem
 
   private:
     // Constrói o modelo base do subproblema primal
-    void build_base_model();
+    void buildBaseModel();
 
     // Atualiza o lado direito das restrições que dependem de (a,b)
-    void update_model(const IloNumArray &a, const IloNumArray &b);
+    void updateModel(const IloNumArray &a, const IloNumArray &b);
 };

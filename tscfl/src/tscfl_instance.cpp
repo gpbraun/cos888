@@ -28,7 +28,7 @@ TSCFLInstance::TSCFLInstance(IloEnv &env_, int _nI, int _nJ, int _nK)
 }
 
 TSCFLInstance
-TSCFLInstance::from_txt(IloEnv &env, const std::string &path)
+TSCFLInstance::read(IloEnv &env, const std::string &path)
 {
     std::ifstream in(path);
     if (!in)

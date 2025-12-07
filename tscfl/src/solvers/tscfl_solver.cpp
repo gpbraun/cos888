@@ -14,36 +14,29 @@ Gabriel Braun, 2025
 TSCFLSolver::TSCFLSolver(const TSCFLInstance &inst_)
     : env(inst_.env),
       inst(inst_),
-      lb(0.0),
-      ub(IloInfinity),
-      gap(IloInfinity),
-      time(0.0),
-      iter(0),
-      nodes(0),
-      status(IloAlgorithm::Unknown)
+      a(env, inst.nI),
+      b(env, inst.nJ),
+      x(env, inst.nI, inst.nJ),
+      y(env, inst.nJ, inst.nK)
 {
 }
 
 void
-TSCFLSolver::update_gap()
+TSCFLSolver::updateGap()
 {
     if (ub < IloInfinity && lb > EPS && ub > lb)
         {
             gap = (ub - lb) / IloAbs(ub);
 
             if (gap <= MIP_GAP)
-                {
-                    status = IloAlgorithm::Optimal;
-                }
+                status = IloAlgorithm::Optimal;
             else
-                {
-                    status = IloAlgorithm::Feasible;
-                }
+                status = IloAlgorithm::Feasible;
         }
 }
 
 void
-TSCFLSolver::print_summary(const char *tag) const
+TSCFLSolver::printSummary(const char *tag) const
 {
     std::cout << "\n\n"
               << "[" << tag << "] Solver finalizado.\n\n"

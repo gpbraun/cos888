@@ -21,7 +21,7 @@ SubproblemDual::SubproblemDual(const TSCFLInstance &inst_)
       var_m2(env, inst_.nK, -IloInfinity, IloInfinity),
       obj(IloMaximize(env, 0.0))
 {
-    build_base_model();
+    buildModel();
     cplex.extract(model);
 
     // Parâmetros do CPLEX (subproblema)
@@ -42,7 +42,7 @@ SubproblemDual::~SubproblemDual()
 }
 
 void
-SubproblemDual::build_base_model()
+SubproblemDual::buildModel()
 {
     // RESTRIÇÕES DO SUBPROBLEMA DUAL
     // arcos planta -> depósito
@@ -60,7 +60,7 @@ SubproblemDual::build_base_model()
 }
 
 void
-SubproblemDual::update_model(const IloNumArray &a, const IloNumArray &b)
+SubproblemDual::updateModel(const IloNumArray &a, const IloNumArray &b)
 {
     IloExpr obj_expr(env);
 
@@ -81,7 +81,7 @@ void
 SubproblemDual::solve(const IloNumArray &a, const IloNumArray &b)
 {
     // Atualiza a função objetivo
-    update_model(a, b);
+    updateModel(a, b);
 
     // Resolve o LP dual
     if (!cplex.solve())
@@ -102,5 +102,5 @@ SubproblemDual::solve(const IloNumArray &a, const IloNumArray &b)
         rhs += inst.r[k] * cplex.getValue(var_m2[k]);
 
     // Calcula o custo do problema original
-    update_opt(a, b);
+    opt = IloScalProd(inst.f, a) + IloScalProd(inst.g, b) + theta;
 }

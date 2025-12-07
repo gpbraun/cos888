@@ -22,8 +22,8 @@ class TSCFLSolverBenders : public TSCFLSolver
     IloCplex cplex;
     std::unique_ptr<Subproblem> subproblem;
 
-    IloBoolVarArray var_a; // a[i]
-    IloBoolVarArray var_b; // b[j]
+    IloBoolVarArray var_a; // var_a[i]
+    IloBoolVarArray var_b; // var_b[j]
     IloNumVar var_eta;     // custo de segundo estágio
 
   public:
@@ -33,8 +33,8 @@ class TSCFLSolverBenders : public TSCFLSolver
 
     ~TSCFLSolverBenders();
 
-    bool solve(bool log_output = true, double time_limit = -1.0) override;
+    void solve(bool log_output = true, double time_limit = -1.0) override;
 
   private:
-    void build_model();
+    void buildModel();
 };
