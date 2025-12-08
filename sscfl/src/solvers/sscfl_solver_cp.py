@@ -130,10 +130,10 @@ class SSCFLSolverCP:
 
         # Log final
         print("\n\n[CP] Solver finalizado\n")
-        print(f"LB    = {self.lb:.0f}")
-        print(f"UB    = {self.ub:.0f}")
-        print(f"gap   = {self.gap:.2e}")
-        print(f"time  = {self.time:.1f}")
-        print(f"brncs = {self.branches}")
+        print(f"LB       = {self.lb:.0f}")
+        print(f"UB       = {self.ub:.0f}")
+        print(f"gap      = {self.gap:.2e}")
+        print(f"time     = {self.time:.1f}")
+        print(f"branches = {self.branches}")
 
         return sol
