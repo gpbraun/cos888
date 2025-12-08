@@ -37,9 +37,7 @@ TSCFLSolverColumnGeneration::TSCFLSolverColumnGeneration(
 
     // Inicializa arrays de restrições (j,k)
     for (IloInt j = 0; j < inst.nJ; ++j)
-        {
-            constrs_v[j] = IloRangeArray(env, inst.nK);
-        }
+        constrs_v[j] = IloRangeArray(env, inst.nK);
 
     buildModel();
     cplex.extract(model);
@@ -172,7 +170,7 @@ TSCFLSolverColumnGeneration::buildModel()
 }
 
 void
-TSCFLSolverColumnGeneration::addColumn(int k, int i, int j)
+TSCFLSolverColumnGeneration::addColumn(IloInt k, IloInt i, IloInt j)
 {
     col_info[k].push_back({ i, j });
 
@@ -197,9 +195,8 @@ TSCFLSolverColumnGeneration::getNumColumns() const
 {
     IloInt total = 0;
     for (IloInt k = 0; k < inst.nK; ++k)
-        {
-            total += z[k].getSize();
-        }
+        total += z[k].getSize();
+
     return total;
 }
 
@@ -261,8 +258,8 @@ TSCFLSolverColumnGeneration::solve(bool log_output, IloNum time_limit)
             if (SP.opt + EPS < ub)
                 {
                     ub = SP.opt;
-                    a = SP.a;
-                    b = SP.b;
+                    a = SP.a.copy();
+                    b = SP.b.copy();
                 }
 
             updateGap();
@@ -275,7 +272,7 @@ TSCFLSolverColumnGeneration::solve(bool log_output, IloNum time_limit)
                 cplex.getDuals(v[j], constrs_v[j]);
 
             // Pricing por cliente k
-            bool any_new = false;
+            IloBool any_new = false;
             for (IloInt k = 0; k < inst.nK; ++k)
                 {
                     const IloNum rk = inst.r[k];
@@ -338,6 +335,7 @@ TSCFLSolverColumnGeneration::solve(bool log_output, IloNum time_limit)
 
     timer.stop();
 
+    // Recupera os fluxos (x e y)
     updateFlows();
 
     // Log final

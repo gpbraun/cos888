@@ -30,7 +30,7 @@ class LRPBalance : public LRP
     void solve() override;
 
     // Atualiza multiplicadores (m1, m2) e multiplicadores dos cortes
-    void update_multipliers(IloNum step) override;
+    void updateMultipliers(IloNum step) override;
 
     // ||g||^2 = ||g1||^2 + ||g2||^2 + contribuição dos cortes
     IloNum norm2sq() const override;

@@ -53,7 +53,7 @@ class LRP
     virtual void solve() = 0;
 
     // Atualiza multiplicadores (l1,l2 ou m1,m2) e dos cortes.
-    virtual void update_multipliers(IloNum step) = 0;
+    virtual void updateMultipliers(IloNum step) = 0;
 
     // Retorna: ||g||^2 (quadrado da norma dos subgradientes)
     virtual IloNum norm2sq() const = 0;

@@ -51,7 +51,7 @@ class RelaxationBalance : public Relaxation
         // 0) Zera fluxos e atualiza custos induzidos pelos cortes
         fillZero(x);
         fillZero(y);
-        cuts.update_costs();
+        cuts.updateCosts();
 
         // 1) Subproblema das plantas (mochila contínua em x,a)
         for (IloInt i = 0; i < nI; ++i)
@@ -199,7 +199,7 @@ class RelaxationBalance : public Relaxation
     // projeção em R_+, ao contrário de l1,l2 em RelaxationCapacity.
     // --------------------------------------------------------------
     void
-    update_multipliers(IloNum step) override
+    updateMultipliers(IloNum step) override
     {
         if (step <= 0.0)
             return;
@@ -213,6 +213,6 @@ class RelaxationBalance : public Relaxation
         for (IloInt j = 0; j < nJ; ++j)
             m2[j] += step * g2[j];
 
-        cuts.update_multipliers(step);
+        cuts.updateMultipliers(step);
     }
 };

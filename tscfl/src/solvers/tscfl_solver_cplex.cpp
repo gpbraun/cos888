@@ -44,31 +44,30 @@ TSCFLSolverCplex::~TSCFLSolverCplex()
 void
 TSCFLSolverCplex::buildModel()
 {
+    // RESTRIÇÕES
     // Capacidade das plantas
-    for (int i = 0; i < inst.nI; ++i)
+    for (IloInt i = 0; i < inst.nI; ++i)
         model.add(IloSum(var_x[i]) <= inst.p[i] * var_a[i]);
 
     // Capacidade dos depósitos
-    for (int j = 0; j < inst.nJ; ++j)
+    for (IloInt j = 0; j < inst.nJ; ++j)
         model.add(IloSum(var_y[j]) <= inst.q[j] * var_b[j]);
 
     // Balanço nos depósitos
-    for (int j = 0; j < inst.nJ; ++j)
+    for (IloInt j = 0; j < inst.nJ; ++j)
         model.add(IloSum(var_x.col(j)) - IloSum(var_y[j]) == 0.0);
 
     // Demanda dos clientes
-    for (int k = 0; k < inst.nK; ++k)
+    for (IloInt k = 0; k < inst.nK; ++k)
         model.add(IloSum(var_y.col(k)) == inst.r[k]);
 
-    // Função objetivo
-    IloExpr obj_expr(env);
-
-    obj_expr = IloScalProd(inst.f, var_a) + IloScalProd(inst.g, var_b)
-               + IloMatScalProd(inst.c, var_x) + IloMatScalProd(inst.d, var_y);
-
-    IloObjective obj = IloMinimize(env, obj_expr);
+    // FUNÇÃO OBJETIVO
+    IloObjective obj = IloMinimize(
+        env,
+        IloScalProd(inst.f, var_a) + IloScalProd(inst.g, var_b) + IloMatScalProd(inst.c, var_x)
+            + IloMatScalProd(inst.d, var_y)
+    );
     model.add(obj);
-    obj_expr.end();
 }
 
 void

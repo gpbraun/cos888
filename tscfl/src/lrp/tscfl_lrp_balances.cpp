@@ -26,22 +26,18 @@ LRPBalance::LRPBalance(const TSCFLInstance &inst_)
 void
 LRPBalance::solve()
 {
-    const IloInt nI = inst.nI;
-    const IloInt nJ = inst.nJ;
-    const IloInt nK = inst.nK;
-
     // Zera fluxos e atualiza custos induzidos pelos cortes
     fillZero(x);
     fillZero(y);
-    cuts.update_costs();
+    cuts.updateCosts();
 
     // Subproblema das plantas (x, a)
-    for (IloInt i = 0; i < nI; ++i)
+    for (IloInt i = 0; i < inst.nI; ++i)
         {
             IloNum best_red = IloInfinity;
             IloInt best_j = -1;
 
-            for (IloInt j = 0; j < nJ; ++j)
+            for (IloInt j = 0; j < inst.nJ; ++j)
                 {
                     const IloNum red = inst.c[i][j] + m2[j] + cuts.cost_x[i][j];
                     if (red < best_red)
@@ -84,12 +80,12 @@ LRPBalance::solve()
         }
 
     // 2) Subproblema dos depósitos (y, b)
-    for (IloInt j = 0; j < nJ; ++j)
+    for (IloInt j = 0; j < inst.nJ; ++j)
         {
             IloNum best_red = IloInfinity;
             IloInt best_k = -1;
 
-            for (IloInt k = 0; k < nK; ++k)
+            for (IloInt k = 0; k < inst.nK; ++k)
                 {
                     const IloNum red = inst.d[j][k] - m1[k] - m2[j] + cuts.cost_y[j][k];
                     if (red < best_red)
@@ -127,10 +123,10 @@ LRPBalance::solve()
 
     // Subgradientes das restrições relaxadas
     // Demanda dos clientes
-    for (IloInt k = 0; k < nK; ++k)
+    for (IloInt k = 0; k < inst.nK; ++k)
         {
             IloNum sum_y = 0.0;
-            for (IloInt j = 0; j < nJ; ++j)
+            for (IloInt j = 0; j < inst.nJ; ++j)
                 {
                     sum_y += y[j][k];
                 }
@@ -138,10 +134,10 @@ LRPBalance::solve()
         }
 
     // Balanço nos depósitos
-    for (IloInt j = 0; j < nJ; ++j)
+    for (IloInt j = 0; j < inst.nJ; ++j)
         {
             IloNum sum_x = 0.0;
-            for (IloInt i = 0; i < nI; ++i)
+            for (IloInt i = 0; i < inst.nI; ++i)
                 {
                     sum_x += x[i][j];
                 }
@@ -154,10 +150,8 @@ LRPBalance::solve()
           + IloMatScalProd(inst.d, y) + IloScalProd(m1, g1) + IloScalProd(m2, g2);
 }
 
-// Atualiza multiplicadores (m1, m2) e multiplicadores dos cortes
-// m1 e m2 são livres (restrições de igualdade)
 void
-LRPBalance::update_multipliers(IloNum step)
+LRPBalance::updateMultipliers(IloNum step)
 {
     if (step <= 0.0)
         return;
@@ -174,10 +168,9 @@ LRPBalance::update_multipliers(IloNum step)
             m2[j] += step * g2[j];
         }
 
-    cuts.update_multipliers(step);
+    cuts.updateMultipliers(step);
 }
 
-// ||g||^2 = ||g1||^2 + ||g2||^2 + contribuição dos cortes
 IloNum
 LRPBalance::norm2sq() const
 {

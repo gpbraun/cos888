@@ -28,7 +28,7 @@ LRPCapacity::solve()
     fillZero(g1);
     fillZero(g2);
 
-    cuts.update_costs();
+    cuts.updateCosts();
 
     // Para cada satélite j, escolhe a melhor planta i
     for (IloInt j = 0; j < inst.nJ; ++j)
@@ -110,7 +110,7 @@ LRPCapacity::solve()
 }
 
 void
-LRPCapacity::update_multipliers(IloNum step)
+LRPCapacity::updateMultipliers(IloNum step)
 {
     if (step <= 0.0)
         return;
@@ -121,7 +121,7 @@ LRPCapacity::update_multipliers(IloNum step)
     for (IloInt j = 0; j < inst.nJ; ++j)
         l2[j] = IloMax(0.0, l2[j] + step * g2[j]);
 
-    cuts.update_multipliers(step);
+    cuts.updateMultipliers(step);
 }
 
 IloNum

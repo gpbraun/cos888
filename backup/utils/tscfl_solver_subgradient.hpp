@@ -127,7 +127,7 @@ class TSCFLSolverSubgradient
                     step = IloMax(epsilon * (ub - opt_lr) / norm2, 0.0);
 
                 // Atualiza os multiplicadores
-                LR.update_multipliers(step);
+                LR.updateMultipliers(step);
 
                 // Atualiza o epsilon se necessário
                 if (iter - last_improv_iter >= MAX_NO_IMPROV)

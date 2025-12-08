@@ -153,7 +153,7 @@ class FlowCoverCutSet
 
     // Atualiza: multiplicadores de Lagrange dos cortes.
     void
-    update_multipliers(double step)
+    updateMultipliers(double step)
     {
         for (auto &c : cuts)
             {
@@ -164,7 +164,7 @@ class FlowCoverCutSet
 
     // Atualiza: custos adicionais.
     void
-    update_costs()
+    updateCosts()
     {
         fillZero(cost_x);
         fillZero(cost_y);

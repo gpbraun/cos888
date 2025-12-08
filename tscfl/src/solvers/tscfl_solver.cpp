@@ -28,12 +28,12 @@ TSCFLSolver::printSummary(const char *tag) const
     // clang-format off
     std::cout << "\n\n[" << tag << "] Solver finalizado.\n\n"
               << "status = " << status << "\n"
-              << std::fixed << std::setprecision(0)      << "nodes  = " << nodes << "\n"
-              << std::fixed << std::setprecision(0)      << "iters  = " << iter  << "\n"
-              << std::fixed << std::setprecision(1)      << "time   = " << time  << " s\n"
               << std::fixed << std::setprecision(0)      << "LB     = " << lb    << "\n"
               << std::fixed << std::setprecision(0)      << "UB     = " << ub    << "\n"
               << std::scientific << std::setprecision(2) << "gap    = " << gap   << "\n"
+              << std::fixed << std::setprecision(1)      << "time   = " << time  << " s\n"
+              << std::fixed << std::setprecision(0)      << "nodes  = " << nodes << "\n"
+              << std::fixed << std::setprecision(0)      << "iters  = " << iter  << "\n"
               << std::defaultfloat;
     // clang-format on
 }
@@ -41,7 +41,7 @@ TSCFLSolver::printSummary(const char *tag) const
 void
 TSCFLSolver::updateGap()
 {
-    if (ub < IloInfinity && lb > EPS && ub > lb)
+    if (ub < IloInfinity && lb > EPS && ub >= lb)
         {
             gap = (ub - lb) / IloAbs(ub);
 
@@ -57,10 +57,10 @@ TSCFLSolver::updateFlows(
     const IloCplex &cplex, const IloNumVarMatrix &var_x, const IloNumVarMatrix &var_y
 )
 {
-    for (int i = 0; i < inst.nI; ++i)
+    for (IloInt i = 0; i < inst.nI; ++i)
         cplex.getValues(x[i], var_x[i]);
 
-    for (int j = 0; j < inst.nJ; ++j)
+    for (IloInt j = 0; j < inst.nJ; ++j)
         cplex.getValues(y[j], var_y[j]);
 }
 

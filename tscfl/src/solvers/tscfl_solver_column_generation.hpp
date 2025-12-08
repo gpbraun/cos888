@@ -34,14 +34,13 @@ class TSCFLSolverColumnGeneration : public TSCFLSolver
     IloRangeArray constr_l2;
     IloRangeArray constr_m2;
     IloArray<IloRangeArray> constrs_v;
-
     IloObjective obj;
 
     // Colunas
     struct ColumnInfo
     {
-        int i; // planta
-        int j; // depósito
+        IloInt i; // planta
+        IloInt j; // depósito
     };
     std::vector<std::vector<ColumnInfo>> col_info; // col_info[k][t] = (i,j) do padrão t de k
     std::vector<IloNumVarArray> z;                 // z[k][t]
@@ -60,7 +59,7 @@ class TSCFLSolverColumnGeneration : public TSCFLSolver
     void buildModel();
 
     // Adiciona uma coluna ao modelo.
-    void addColumn(int k, int i, int j);
+    void addColumn(IloInt k, IloInt i, IloInt j);
 
     // Retorna: número atual de colunas.
     IloInt getNumColumns() const;

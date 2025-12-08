@@ -10,8 +10,6 @@ Gabriel Braun, 2025
 
 #include <ilcplex/ilocplex.h>
 
-ILOSTLBEGIN
-
 // =====================================================================
 //  CONSTANTES GLOBAIS
 // =====================================================================
@@ -53,10 +51,6 @@ class IloNumVarMatrix : public IloArray<IloNumVarArray>
     IloNumVarArray col(IloInt j) const;
 };
 
-// =====================================================================
-//  FUNÇÕES AUXILIARES
-// =====================================================================
-
 // Produto escalar entre matrizes de constantes.
 IloNum IloMatScalProd(const IloNumMatrix &c, const IloNumMatrix &d);
 
@@ -70,4 +64,4 @@ IloExpr IloMatScalProd(const IloNumMatrix &c, const IloNumVarMatrix &x);
 void fillZero(IloNumArray &a);
 
 // Reseta uma matriz para zero (IloNum).
-void fillZero(IloNumMatrix &M);
+void fillZero(IloNumMatrix &a);

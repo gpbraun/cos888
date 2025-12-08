@@ -28,7 +28,7 @@ class TSCFLSolverBenders : public TSCFLSolver
 
   public:
     explicit TSCFLSolverBenders(
-        const TSCFLInstance &inst_, Subproblem::Mode smode = Subproblem::Mode::NET
+        const TSCFLInstance &inst_, Subproblem::Mode sp_mode = Subproblem::Mode::NET
     );
 
     ~TSCFLSolverBenders();

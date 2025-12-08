@@ -47,23 +47,19 @@ LRP::separate_flow_covers(IloInt max_new_cuts)
     if (max_new_cuts <= 0)
         return 0;
 
-    const IloInt nI = inst.nI;
-    const IloInt nJ = inst.nJ;
-    const IloInt nK = inst.nK;
-
     // Máximo de covers por cada planta/depósito
     static const IloInt MAX_COVERS_PER_NODE = 3;
 
     std::vector<FlowCoverCut> candidates;
-    candidates.reserve(static_cast<std::size_t>(3 * (nI + nJ)));
+    candidates.reserve(static_cast<std::size_t>(3 * (inst.nI + inst.nJ)));
 
     // Cortes de planta (flow-cover em ∑_j x_ij ≤ p_i a_i)
-    for (IloInt i = 0; i < nI; ++i)
+    for (IloInt i = 0; i < inst.nI; ++i)
         {
             // índices j com x_ij > 0 e q_j > 0
             std::vector<IloInt> idx;
-            idx.reserve(static_cast<std::size_t>(nJ));
-            for (IloInt j = 0; j < nJ; ++j)
+            idx.reserve(static_cast<std::size_t>(inst.nJ));
+            for (IloInt j = 0; j < inst.nJ; ++j)
                 {
                     if (x[i][j] > EPS && inst.q[j] > EPS)
                         idx.push_back(j);
@@ -109,8 +105,8 @@ LRP::separate_flow_covers(IloInt max_new_cuts)
                     IloNum lhs = -inst.p[i] * a[i] + prefix_x[t];
 
                     // cost[j] = 1 se j ∈ T, 0 caso contrário
-                    IloNumArray cost(env, nJ);
-                    for (IloInt j = 0; j < nJ; ++j)
+                    IloNumArray cost(env, inst.nJ);
+                    for (IloInt j = 0; j < inst.nJ; ++j)
                         cost[j] = 0.0;
                     for (std::size_t u = 0; u <= t; ++u)
                         {
@@ -120,7 +116,7 @@ LRP::separate_flow_covers(IloInt max_new_cuts)
 
                     // rhs = ∑_{j∉T} min(q_j, overflow_cap)
                     IloNum rhs = 0.0;
-                    for (IloInt j = 0; j < nJ; ++j)
+                    for (IloInt j = 0; j < inst.nJ; ++j)
                         {
                             if (cost[j] <= EPS)
                                 rhs += IloMin(inst.q[j], overflow_cap);
@@ -129,9 +125,7 @@ LRP::separate_flow_covers(IloInt max_new_cuts)
                     const IloNum viol = lhs - rhs;
                     if (viol > EPS)
                         {
-                            FlowCoverCut cut(
-                                FlowCoverCut::NodeType::PLANT, static_cast<int>(i), cost, rhs
-                            );
+                            FlowCoverCut cut(FlowCoverCut::Family::PLANT, i, cost, rhs);
                             cut.overflow = viol; // violação do corte
                             candidates.push_back(std::move(cut));
                             ++covers_for_i;
@@ -140,16 +134,16 @@ LRP::separate_flow_covers(IloInt max_new_cuts)
         }
 
     // Cortes de depósito (flow-cover em ∑_k y_jk ≤ q_j b_j)
-    for (IloInt j = 0; j < nJ; ++j)
+    for (IloInt j = 0; j < inst.nJ; ++j)
         {
             // índices k com y_jk > 0 e r_k > 0
             std::vector<IloInt> idx;
-            idx.reserve(static_cast<std::size_t>(nK));
-            for (IloInt k = 0; k < nK; ++k)
-                {
-                    if (y[j][k] > EPS && inst.r[k] > EPS)
-                        idx.push_back(k);
-                }
+            idx.reserve(static_cast<std::size_t>(inst.nK));
+
+            for (IloInt k = 0; k < inst.nK; ++k)
+                if (y[j][k] > EPS && inst.r[k] > EPS)
+                    idx.push_back(k);
+
             if (idx.empty())
                 continue;
 
@@ -191,8 +185,8 @@ LRP::separate_flow_covers(IloInt max_new_cuts)
                     IloNum lhs = -inst.q[j] * b[j] + prefix_y[t];
 
                     // cost[k] = 1 se k ∈ S, 0 caso contrário
-                    IloNumArray cost(env, nK);
-                    for (IloInt k = 0; k < nK; ++k)
+                    IloNumArray cost(env, inst.nK);
+                    for (IloInt k = 0; k < inst.nK; ++k)
                         cost[k] = 0.0;
                     for (std::size_t u = 0; u <= t; ++u)
                         {
@@ -202,7 +196,7 @@ LRP::separate_flow_covers(IloInt max_new_cuts)
 
                     // rhs = ∑_{k∉S} min(r_k, overflow_cap)
                     IloNum rhs = 0.0;
-                    for (IloInt k = 0; k < nK; ++k)
+                    for (IloInt k = 0; k < inst.nK; ++k)
                         {
                             if (cost[k] <= EPS)
                                 rhs += IloMin(inst.r[k], overflow_cap);
@@ -211,9 +205,7 @@ LRP::separate_flow_covers(IloInt max_new_cuts)
                     const IloNum viol = lhs - rhs;
                     if (viol > EPS)
                         {
-                            FlowCoverCut cut(
-                                FlowCoverCut::NodeType::DEPOT, static_cast<int>(j), cost, rhs
-                            );
+                            FlowCoverCut cut(FlowCoverCut::Family::DEPOT, j, cost, rhs);
                             cut.overflow = viol;
                             candidates.push_back(std::move(cut));
                             ++covers_for_j;
@@ -237,7 +229,7 @@ LRP::separate_flow_covers(IloInt max_new_cuts)
         {
             if (new_cuts >= max_new_cuts)
                 break;
-            if (cuts.add_flow_cover(cand))
+            if (cuts.addFlowCover(cand))
                 ++new_cuts;
         }
 
@@ -250,13 +242,9 @@ LRP::separate_subset_rows(IloInt max_new_cuts)
     if (max_new_cuts <= 0)
         return 0;
 
-    const IloInt nI = inst.nI;
-    const IloInt nJ = inst.nJ;
-    const IloInt nK = inst.nK;
-
     // Ordena clientes por demanda r_k decrescente
-    std::vector<IloInt> order_k(static_cast<std::size_t>(nK));
-    for (IloInt k = 0; k < nK; ++k)
+    std::vector<IloInt> order_k(static_cast<std::size_t>(inst.nK));
+    for (IloInt k = 0; k < inst.nK; ++k)
         order_k[static_cast<std::size_t>(k)] = k;
 
     std::sort(
@@ -267,11 +255,11 @@ LRP::separate_subset_rows(IloInt max_new_cuts)
 
     // Vetor de candidatos
     std::vector<SubsetRowCut> candidates;
-    candidates.reserve(2 * static_cast<std::size_t>(nK));
+    candidates.reserve(2 * static_cast<std::size_t>(inst.nK));
 
     // Gera candidatos para vários subconjuntos S (prefixos)
     IloNum R_S = 0.0;
-    for (IloInt t = 0; t < nK; ++t)
+    for (IloInt t = 0; t < inst.nK; ++t)
         {
             const IloInt k_new = order_k[static_cast<std::size_t>(t)];
             R_S += inst.r[k_new];
@@ -280,14 +268,14 @@ LRP::separate_subset_rows(IloInt max_new_cuts)
 
             // Corte em DEPÓSITOS (b_j)
             {
-                IloNumArray coeff_dep(env, nJ);
+                IloNumArray cost_dep(env, inst.nJ);
                 IloNum lhs_dep = 0.0;
                 const IloNum rhs_dep = -1.0;
 
-                for (IloInt j = 0; j < nJ; ++j)
+                for (IloInt j = 0; j < inst.nJ; ++j)
                     {
                         const IloNum alpha_j = IloMin(inst.q[j], R_S) / R_S;
-                        coeff_dep[j] = alpha_j;
+                        cost_dep[j] = alpha_j;
                         if (alpha_j > EPS)
                             lhs_dep += -alpha_j * b[j]; // lhs = -∑ α_j b_j
                     }
@@ -295,7 +283,7 @@ LRP::separate_subset_rows(IloInt max_new_cuts)
                 const IloNum overflow_dep = lhs_dep - rhs_dep; // = 1 - ∑ α_j b_j
                 if (overflow_dep > EPS)
                     {
-                        SubsetRowCut cut(SubsetRowCut::Family::DEPOT, coeff_dep, rhs_dep);
+                        SubsetRowCut cut(SubsetRowCut::Family::DEPOT, cost_dep, rhs_dep);
                         cut.overflow = overflow_dep;
                         candidates.push_back(std::move(cut));
                     }
@@ -303,14 +291,14 @@ LRP::separate_subset_rows(IloInt max_new_cuts)
 
             // Corte em PLANTAS (a_i)
             {
-                IloNumArray coeff_plant(env, nI);
+                IloNumArray cost_plant(env, inst.nI);
                 IloNum lhs_plant = 0.0;
                 const IloNum rhs_plant = -1.0;
 
-                for (IloInt i = 0; i < nI; ++i)
+                for (IloInt i = 0; i < inst.nI; ++i)
                     {
                         const IloNum beta_i = IloMin(inst.p[i], R_S) / R_S;
-                        coeff_plant[i] = beta_i;
+                        cost_plant[i] = beta_i;
                         if (beta_i > EPS)
                             lhs_plant += -beta_i * a[i]; // lhs = -∑ β_i a_i
                     }
@@ -318,7 +306,7 @@ LRP::separate_subset_rows(IloInt max_new_cuts)
                 const IloNum overflow_plant = lhs_plant - rhs_plant; // = 1 - ∑ β_i a_i
                 if (overflow_plant > EPS)
                     {
-                        SubsetRowCut cut(SubsetRowCut::Family::PLANT, coeff_plant, rhs_plant);
+                        SubsetRowCut cut(SubsetRowCut::Family::PLANT, cost_plant, rhs_plant);
                         cut.overflow = overflow_plant;
                         candidates.push_back(std::move(cut));
                     }
@@ -341,7 +329,7 @@ LRP::separate_subset_rows(IloInt max_new_cuts)
         {
             if (new_cuts >= max_new_cuts)
                 break;
-            if (cuts.add_subset_row(cand))
+            if (cuts.addSubsetRow(cand))
                 ++new_cuts;
         }
 

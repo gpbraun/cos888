@@ -32,8 +32,8 @@ class TSCFLSolverSubgradient : public TSCFLSolver
   public:
     explicit TSCFLSolverSubgradient(
         const TSCFLInstance &inst_,
-        LRP::Mode rmode = LRP::Mode::CAPACITIES,
-        Subproblem::Mode smode = Subproblem::Mode::NET
+        LRP::Mode lr_mode = LRP::Mode::CAPACITIES,
+        Subproblem::Mode sp_mode = Subproblem::Mode::NET
     );
 
     void solve(bool log_output = true, IloNum time_limit = -1.0) override;

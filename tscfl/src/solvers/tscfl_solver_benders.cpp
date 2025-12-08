@@ -175,7 +175,7 @@ class UserBendersCallbackI : public IloCplex::UserCutCallbackI
         // Evita cortes para soluções muito fracionárias
         IloNum frac_sum = 0.0;
 
-        for (int i = 0; i < inst.nI; ++i)
+        for (IloInt i = 0; i < inst.nI; ++i)
             {
                 IloNum v = a[i];
                 IloNum frac = IloAbs(v - IloRound(v));
@@ -183,7 +183,7 @@ class UserBendersCallbackI : public IloCplex::UserCutCallbackI
                 if (frac_sum > MAX_FRAC_SUM)
                     return;
             }
-        for (int j = 0; j < inst.nJ; ++j)
+        for (IloInt j = 0; j < inst.nJ; ++j)
             {
                 IloNum v = b[j];
                 IloNum frac = IloAbs(v - IloRound(v));
@@ -195,25 +195,25 @@ class UserBendersCallbackI : public IloCplex::UserCutCallbackI
         // Atualiza core point
         if (core_initialized)
             {
-                for (int i = 0; i < inst.nI; ++i)
+                for (IloInt i = 0; i < inst.nI; ++i)
                     a_core[i] = (1.0 - OMEGA_CORE) * a_core[i] + OMEGA_CORE * a[i];
-                for (int j = 0; j < inst.nJ; ++j)
+                for (IloInt j = 0; j < inst.nJ; ++j)
                     b_core[j] = (1.0 - OMEGA_CORE) * b_core[j] + OMEGA_CORE * b[j];
             }
         else
             {
-                for (int i = 0; i < inst.nI; ++i)
+                for (IloInt i = 0; i < inst.nI; ++i)
                     a_core[i] = a[i];
-                for (int j = 0; j < inst.nJ; ++j)
+                for (IloInt j = 0; j < inst.nJ; ++j)
                     b_core[j] = b[j];
 
                 core_initialized = IloTrue;
             }
 
         // Ponto de separação
-        for (int i = 0; i < inst.nI; ++i)
+        for (IloInt i = 0; i < inst.nI; ++i)
             a_sep[i] = OMEGA_SET * a[i] + (1.0 - OMEGA_SET) * a_core[i];
-        for (int j = 0; j < inst.nJ; ++j)
+        for (IloInt j = 0; j < inst.nJ; ++j)
             b_sep[j] = OMEGA_SET * b[j] + (1.0 - OMEGA_SET) * b_core[j];
 
         // Resolve subproblema no ponto de separação
@@ -312,6 +312,8 @@ TSCFLSolverBenders::solve(bool log_output, double time_limit)
 
             cplex.getValues(a, var_a);
             cplex.getValues(b, var_b);
+
+            // Recupera os fluxos (x e y)
             updateFlows();
         }
 

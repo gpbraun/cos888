@@ -34,21 +34,21 @@ TSCFLInstance::read(IloEnv &env, const std::string &path)
     if (!in)
         throw std::runtime_error("Erro de leitura: " + path);
 
-    std::vector<double> a;
+    std::vector<IloNum> a;
     a.reserve(1 << 20);
 
-    double v;
+    IloNum v;
     while (in >> v)
         a.push_back(v);
 
-    const int len = static_cast<int>(a.size());
+    const IloInt len = a.size();
     if (len < 3)
         throw std::runtime_error("Erro no arquivo da instância (header).");
 
-    int pos = 0;
-    IloInt nI = static_cast<IloInt>(a[pos++]);
-    IloInt nJ = static_cast<IloInt>(a[pos++]);
-    IloInt nK = static_cast<IloInt>(a[pos++]);
+    IloInt pos = 0;
+    IloInt nI = a[pos++];
+    IloInt nJ = a[pos++];
+    IloInt nK = a[pos++];
 
     TSCFLInstance inst(env, nI, nJ, nK);
 
@@ -56,25 +56,25 @@ TSCFLInstance::read(IloEnv &env, const std::string &path)
     if (pos + nK > len)
         throw std::runtime_error("Erro no arquivo da instância (r).");
 
-    for (int k = 0; k < nK; ++k)
+    for (IloInt k = 0; k < nK; ++k)
         inst.r[k] = a[pos++];
 
     // (q, g): nJ pares
     if (pos + 2 * nJ > len)
         throw std::runtime_error("Erro no arquivo da instância (q,g).");
 
-    for (int j = 0; j < nJ; ++j)
+    for (IloInt j = 0; j < nJ; ++j)
         {
             inst.q[j] = a[pos++];
             inst.g[j] = a[pos++];
         }
 
     // c: nI * nJ
-    const int nIJ = nI * nJ;
+    const IloInt nIJ = nI * nJ;
     if (pos + nIJ > len)
         throw std::runtime_error("Erro no arquivo da instância (c).");
 
-    for (int i = 0; i < nI; ++i)
+    for (IloInt i = 0; i < nI; ++i)
         for (int j = 0; j < nJ; ++j)
             inst.c[i][j] = a[pos++];
 
@@ -82,19 +82,19 @@ TSCFLInstance::read(IloEnv &env, const std::string &path)
     if (pos + 2 * nI > len)
         throw std::runtime_error("Erro no arquivo da instância (p,f).");
 
-    for (int i = 0; i < nI; ++i)
+    for (IloInt i = 0; i < nI; ++i)
         {
             inst.p[i] = a[pos++];
             inst.f[i] = a[pos++];
         }
 
     // d: nJ * nK
-    const int nJK = nJ * nK;
+    const IloInt nJK = nJ * nK;
     if (pos + nJK > len)
         throw std::runtime_error("Erro no arquivo da instância (d).");
 
-    for (int j = 0; j < nJ; ++j)
-        for (int k = 0; k < nK; ++k)
+    for (IloInt j = 0; j < nJ; ++j)
+        for (IloInt k = 0; k < nK; ++k)
             inst.d[j][k] = a[pos++];
 
     return inst;

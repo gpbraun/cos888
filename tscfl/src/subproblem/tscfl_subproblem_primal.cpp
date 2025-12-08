@@ -50,28 +50,28 @@ SubproblemPrimal::buildModel()
 {
     // RESTRIÇÕES DO SUBPROBLEMA PRIMAL
     // Capacidade das plantas
-    for (int i = 0; i < inst.nI; ++i)
+    for (IloInt i = 0; i < inst.nI; ++i)
         {
             constr_l1[i] = IloRange(env, -IloInfinity, IloSum(var_x[i]), IloInfinity);
             model.add(constr_l1[i]);
         }
 
     // Capacidade dos depósitos
-    for (int j = 0; j < inst.nJ; ++j)
+    for (IloInt j = 0; j < inst.nJ; ++j)
         {
             constr_l2[j] = IloRange(env, -IloInfinity, IloSum(var_y[j]), IloInfinity);
             model.add(constr_l2[j]);
         }
 
     // Balanço nos depósitos
-    for (int j = 0; j < inst.nJ; ++j)
+    for (IloInt j = 0; j < inst.nJ; ++j)
         {
             constr_m1[j] = IloRange(env, 0.0, IloSum(var_x.col(j)) - IloSum(var_y[j]), 0.0);
             model.add(constr_m1[j]);
         }
 
     // Demanda dos clientes
-    for (int k = 0; k < inst.nK; ++k)
+    for (IloInt k = 0; k < inst.nK; ++k)
         {
             constr_m2[k] = IloRange(env, inst.r[k], IloSum(var_y.col(k)), IloInfinity);
             model.add(constr_m2[k]);
@@ -87,11 +87,11 @@ void
 SubproblemPrimal::updateModel()
 {
     // Capacidade das plantas
-    for (int i = 0; i < inst.nI; ++i)
+    for (IloInt i = 0; i < inst.nI; ++i)
         constr_l1[i].setBounds(-IloInfinity, inst.p[i] * a[i]);
 
     // Capacidade dos depósitos
-    for (int j = 0; j < inst.nJ; ++j)
+    for (IloInt j = 0; j < inst.nJ; ++j)
         constr_l2[j].setBounds(-IloInfinity, inst.q[j] * b[j]);
 }
 
@@ -113,10 +113,10 @@ SubproblemPrimal::solve()
     cplex.getDuals(m2, constr_m2);
 
     // Calcula os coeficientes do corte
-    for (int i = 0; i < inst.nI; ++i)
+    for (IloInt i = 0; i < inst.nI; ++i)
         coef_a[i] = inst.p[i] * l1[i];
 
-    for (int j = 0; j < inst.nJ; ++j)
+    for (IloInt j = 0; j < inst.nJ; ++j)
         coef_b[j] = inst.q[j] * l2[j];
 
     rhs = IloScalProd(inst.r, m2);
@@ -128,9 +128,9 @@ SubproblemPrimal::solve()
 void
 SubproblemPrimal::getFlows(IloNumMatrix &x, const IloNumMatrix &y)
 {
-    for (int i = 0; i < inst.nI; ++i)
+    for (IloInt i = 0; i < inst.nI; ++i)
         cplex.getValues(x[i], var_x[i]);
 
-    for (int j = 0; j < inst.nJ; ++j)
+    for (IloInt j = 0; j < inst.nJ; ++j)
         cplex.getValues(y[j], var_y[j]);
 }

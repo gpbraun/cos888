@@ -110,7 +110,7 @@ Subproblem::convertToPrimal()
 }
 
 void
-Subproblem::update(const IloNumArray &a_, const IloNumArray &b_, bool convert_to_primal)
+Subproblem::update(const IloNumArray &a_, const IloNumArray &b_, IloBool convert_to_primal)
 {
     a = a_;
     b = b_;
@@ -124,7 +124,7 @@ Subproblem::update(
     const IloCplex &cpx,
     const IloNumVarArray &var_a,
     const IloNumVarArray &var_b,
-    bool convert_to_primal
+    IloBool convert_to_primal
 )
 {
     cpx.getValues(a, var_a);

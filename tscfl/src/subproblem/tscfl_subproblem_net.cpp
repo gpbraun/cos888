@@ -56,12 +56,12 @@ SubproblemNet::buildNet()
     const int nK = inst.nK;
 
     // Nós:
-    //   0                 (s)
-    //   1..nI             (plants)
-    //   nI+1 .. nI+nJ     (depotIn)
-    //   nI+nJ+1 .. nI+2nJ (depotOut)
-    //   ...               (customers)
-    //   último            (t)
+    // 0                 (s)
+    // 1..nI             (plants)
+    // nI+1 .. nI+nJ     (depotIn)
+    // nI+nJ+1 .. nI+2nJ (depotOut)
+    // ...               (customers)
+    // último            (t)
     nN = 2 + nI + 2 * nJ + nK;
     node_s = 0;
     node_t = nN - 1;
@@ -75,11 +75,11 @@ SubproblemNet::buildNet()
     auto nodeCust = [nI, nJ](int k) { return 1 + nI + 2 * nJ + k; };
 
     // Contagem de arcos:
-    //   s -> plant:           (nI)
-    //   plant -> depotIn:     (nI*nJ)
-    //   depotIn -> depotOut:  (nJ)
-    //   depotOut -> customer: (nJ*nK)
-    //   customer -> t:        (nK)
+    // s -> plant:           (nI)
+    // plant -> depotIn:     (nI*nJ)
+    // depotIn -> depotOut:  (nJ)
+    // depotOut -> customer: (nJ*nK)
+    // customer -> t:        (nK)
     nA = nI + nI * nJ + nJ + nJ * nK + nK;
 
     std::vector<int> from(nA);
@@ -263,9 +263,9 @@ SubproblemNet::solve()
         throw std::runtime_error("SubproblemNet: falha em CPXNETgetdj.");
 
     // Mapeia duais para cortes de Benders e calcula coeficientes
-    //   l1_i  = dj[ arcPlantCap[i] ]
-    //   l2_j  = dj[ arcDepotCap[j] ]
-    //   m2_k  = pi_s - pi_cust(k)
+    // l1_i  = dj[ arcPlantCap[i] ]
+    // l2_j  = dj[ arcDepotCap[j] ]
+    // m2_k  = pi_s - pi_cust(k)
     for (int i = 0; i < nI; ++i)
         {
             double l1_i = dj[arcPlantCap[i]];

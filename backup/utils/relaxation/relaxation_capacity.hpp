@@ -37,7 +37,7 @@ class RelaxationCapacity : public Relaxation
         // 0) Zera fluxos e atualiza custos induzidos pelos cortes
         fillZero(x);
         fillZero(y);
-        cuts.update_costs();
+        cuts.updateCosts();
 
         // 1) Para cada cliente k: envia r_k para o par (i,j) de menor custo reduzido
         for (IloInt k = 0; k < inst.nK; ++k)
@@ -105,7 +105,7 @@ class RelaxationCapacity : public Relaxation
 
     // Atualiza multiplicadores (l1, l2) e multiplicadores dos cortes
     void
-    update_multipliers(IloNum step) override
+    updateMultipliers(IloNum step) override
     {
         if (step <= 0.0)
             return;
@@ -116,6 +116,6 @@ class RelaxationCapacity : public Relaxation
         for (IloInt j = 0; j < inst.nJ; ++j)
             l2[j] = IloMax(0.0, l2[j] + step * g2[j]);
 
-        cuts.update_multipliers(step);
+        cuts.updateMultipliers(step);
     }
 };

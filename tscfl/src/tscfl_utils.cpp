@@ -79,8 +79,8 @@ fillZero(IloNumArray &a)
 }
 
 void
-fillZero(IloNumMatrix &M)
+fillZero(IloNumMatrix &a)
 {
-    for (IloInt i = 0; i < M.getSize(); ++i)
-        fillZero(M[i]);
+    for (IloInt i = 0; i < a.getSize(); ++i)
+        fillZero(a[i]);
 }

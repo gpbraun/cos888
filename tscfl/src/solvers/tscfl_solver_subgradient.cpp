@@ -13,11 +13,11 @@ Gabriel Braun, 2025
 #include <iostream>
 
 TSCFLSolverSubgradient::TSCFLSolverSubgradient(
-    const TSCFLInstance &inst_, LRP::Mode rmode, Subproblem::Mode smode
+    const TSCFLInstance &inst_, LRP::Mode lr_mode, Subproblem::Mode sp_mode
 )
     : TSCFLSolver(inst_),
-      relaxation(LRP::create(inst_, rmode)),
-      subproblem(Subproblem::create(inst_, smode))
+      relaxation(LRP::create(inst_, lr_mode)),
+      subproblem(Subproblem::create(inst_, sp_mode))
 {
 }
 
@@ -118,7 +118,7 @@ TSCFLSolverSubgradient::solve(bool log_output, IloNum time_limit)
                 step = IloMax(epsilon * (ub - LR.opt) / norm2, 0.0);
 
             // Atualiza multiplicadores
-            LR.update_multipliers(step);
+            LR.updateMultipliers(step);
 
             // Atualiza epsilon se necessário
             if (iter - last_improv_iter >= IMPROV_EPSILON
@@ -162,6 +162,7 @@ TSCFLSolverSubgradient::solve(bool log_output, IloNum time_limit)
 
     timer.stop();
 
+    // Recupera os fluxos (x e y)
     updateFlows();
 
     // Log final

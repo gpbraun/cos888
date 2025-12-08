@@ -1,7 +1,7 @@
 /*
 COS888
 
-tscfl_cut_manager.cpp
+tscfl_cut_manager.hpp
 
 Gabriel Braun, 2025
 */
@@ -27,27 +27,28 @@ class Cut
     };
 
     Status status{ Status::CA };
-    IloInt age{ 0 };
+    IloInt age{ 0 };        // idade
     IloNum u{ 0.0 };        // multiplicador de Lagrange
     IloNum overflow{ 0.0 }; // violação (LHS - RHS)
     IloNum rhs{ 0.0 };      // lado direito
-    std::size_t hash{ 0u }; // assinatura para detectar duplicatas
+    std::size_t hash{ 0u }; // hash para detectar duplicatas
 
     Cut(IloNum rhs_, std::size_t hash_);
+
     virtual ~Cut() = default;
 
     // Retorna: LHS do corte em uma solução (x,y,a,b)
-    virtual IloNum compute_lhs(
+    virtual IloNum calculateLHS(
         const TSCFLInstance &inst,
-        const IloNumMatrix &x_lr,
-        const IloNumMatrix &y_lr,
-        const IloNumArray &a_lr,
-        const IloNumArray &b_lr
+        const IloNumMatrix &x,
+        const IloNumMatrix &y,
+        const IloNumArray &a,
+        const IloNumArray &b
     ) const
         = 0;
 
     // Contribuição do corte para os custos agregados
-    virtual void add_to_costs(
+    virtual void addToCosts(
         const TSCFLInstance &inst,
         IloNumArray &cost_a,
         IloNumArray &cost_b,
@@ -61,54 +62,37 @@ class Cut
 class FlowCoverCut : public Cut
 {
   public:
-    enum class NodeType
+    enum class Family
     {
         PLANT,
         DEPOT
     };
 
-  private:
-    NodeType node_type_;
-    int index_;                   // i (planta) ou j (depósito)
-    IloNumArray cost_;            // coeficientes em x[i][·] ou y[j][·]
-    std::vector<IloInt> support_; // índices com cost_ != 0
+    Family family;
+    int index;
+    IloNumArray cost;
+    std::vector<IloInt> support;
 
-    static std::size_t compute_hash(NodeType node_type, int idx, const IloNumArray &cost);
+    FlowCoverCut(Family family_, int index_, const IloNumArray &cost_, IloNum rhs_);
 
-  public:
-    FlowCoverCut(NodeType node_type, int index, const IloNumArray &cost, IloNum rhs);
-
-    NodeType
-    node_type() const noexcept
-    {
-        return node_type_;
-    }
-    int
-    index() const noexcept
-    {
-        return index_;
-    }
-    const IloNumArray &
-    cost() const noexcept
-    {
-        return cost_;
-    }
-
-    IloNum compute_lhs(
+    IloNum calculateLHS(
         const TSCFLInstance &inst,
-        const IloNumMatrix &x_lr,
-        const IloNumMatrix &y_lr,
-        const IloNumArray &a_lr,
-        const IloNumArray &b_lr
+        const IloNumMatrix &x,
+        const IloNumMatrix &y,
+        const IloNumArray &a,
+        const IloNumArray &b
     ) const override;
 
-    void add_to_costs(
+    void addToCosts(
         const TSCFLInstance &inst,
         IloNumArray &cost_a,
         IloNumArray &cost_b,
         IloNumMatrix &cost_x,
         IloNumMatrix &cost_y
     ) const override;
+
+  private:
+    static std::size_t computeHash(Family family_, int idx_, const IloNumArray &cost_);
 };
 
 // CORTE: SubsetRow
@@ -121,42 +105,30 @@ class SubsetRowCut : public Cut
         DEPOT
     };
 
-  private:
-    Family family_;
-    IloNumArray coeff_;
-    std::vector<IloInt> support_;
+    Family family;
+    IloNumArray cost;
+    std::vector<IloInt> support;
 
-    static std::size_t compute_hash(Family family, const IloNumArray &coeff);
+    SubsetRowCut(Family family_, const IloNumArray &cost_, IloNum rhs_);
 
-  public:
-    SubsetRowCut(Family family, const IloNumArray &coeff, IloNum rhs);
-
-    Family
-    family() const noexcept
-    {
-        return family_;
-    }
-    const IloNumArray &
-    coeff() const noexcept
-    {
-        return coeff_;
-    }
-
-    IloNum compute_lhs(
+    IloNum calculateLHS(
         const TSCFLInstance &inst,
-        const IloNumMatrix &x_lr,
-        const IloNumMatrix &y_lr,
-        const IloNumArray &a_lr,
-        const IloNumArray &b_lr
+        const IloNumMatrix &x,
+        const IloNumMatrix &y,
+        const IloNumArray &a,
+        const IloNumArray &b
     ) const override;
 
-    void add_to_costs(
+    void addToCosts(
         const TSCFLInstance &inst,
         IloNumArray &cost_a,
         IloNumArray &cost_b,
         IloNumMatrix &cost_x,
         IloNumMatrix &cost_y
     ) const override;
+
+  private:
+    static std::size_t computeHash(Family family_, const IloNumArray &coeff_);
 };
 
 // GERENCIADOR DE CORTES
@@ -194,36 +166,35 @@ class CutManager
 
     // Adiciona: corte se ainda não existir (baseado no hash).
     // Retorna: true se o corte foi de fato adicionado.
-    bool add(std::unique_ptr<Cut> cut);
-
-    // Adiciona: FlowCover
-    bool add_flow_cover(const FlowCoverCut &cut);
-    bool add_flow_cover(
-        FlowCoverCut::NodeType node_type, int index, const IloNumArray &cost, IloNum rhs
-    );
-
-    // Adiciona: SubsetRow
-    bool add_subset_row(const SubsetRowCut &cut);
-    bool add_subset_row(SubsetRowCut::Family family, const IloNumArray &coeff, IloNum rhs);
+    IloBool add(std::unique_ptr<Cut> cut);
 
     // Retorna: número de cortes em cada status
-    int count(Cut::Status s) const;
+    IloInt count(Cut::Status s) const;
 
     // Retorna: contribuição dos cortes para ||g||^2
     IloNum norm2sq() const;
 
     // Atualiza: multiplicadores dos cortes (subgradiente)
-    void update_multipliers(IloNum step);
+    void updateMultipliers(IloNum step);
 
     // Atualiza: cost_a, cost_b, cost_x, cost_y
-    void update_costs();
+    void updateCosts();
 
     // Atualiza: violação e status (CA/PA/CI)
     void updateStatus(
-        const IloNumMatrix &x_lr,
-        const IloNumMatrix &y_lr,
-        const IloNumArray &a_lr,
-        const IloNumArray &b_lr,
-        int extra_age
+        const IloNumMatrix &x,
+        const IloNumMatrix &y,
+        const IloNumArray &a,
+        const IloNumArray &b,
+        IloInt extra_age
     );
+
+    // Adiciona: FlowCover
+    IloBool addFlowCover(const FlowCoverCut &cut);
+    IloBool addFlowCover(
+        FlowCoverCut::Family family_, IloInt index_, const IloNumArray &cost_, IloNum rhs_
+    );
+    // Adiciona: SubsetRow
+    IloBool addSubsetRow(const SubsetRowCut &cut);
+    IloBool addSubsetRow(SubsetRowCut::Family family_, const IloNumArray &cost_, IloNum rhs_);
 };

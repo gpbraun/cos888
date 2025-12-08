@@ -47,14 +47,14 @@ class Subproblem
     static std::unique_ptr<Subproblem> create(const TSCFLInstance &inst, Mode mode);
 
     // Atualiza: a e b.
-    void update(const IloNumArray &a_, const IloNumArray &b_, bool convert_to_primal = false);
+    void update(const IloNumArray &a_, const IloNumArray &b_, IloBool convert_to_primal = false);
 
     // Atualiza: a e b a partir das variáveis do modelo.
     void update(
         const IloCplex &cpx,
         const IloNumVarArray &var_a,
         const IloNumVarArray &var_b,
-        bool convert_to_primal = false
+        IloBool convert_to_primal = false
     );
 
     // Resolve o subproblema.
