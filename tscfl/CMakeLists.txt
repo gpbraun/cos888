@@ -63,7 +63,7 @@ target_link_libraries(tscfl PUBLIC
 # Executável dos experimentos
 # ------------------------------------------------------------
 add_executable(tscfl_experiments
-    experiments/tscfl_experiments.cpp
+    src/experiments/tscfl_experiments.cpp
 )
 
 # Executável linka apenas com a biblioteca tscfl,

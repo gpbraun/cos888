@@ -1,0 +1,5 @@
+====================================================
+#1. tscfl/data/fernandes/tscfl_050_100_200_a.txt
+
+[CPLEX]       lp=571979    opt=581472    nodes=27    time=1.0    
+[BD-prim]     lb=581472    ub=581472    nodes=51    time=0.2    

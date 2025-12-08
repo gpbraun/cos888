@@ -5,8 +5,8 @@ dependencies:
   - python=3.12
   - pip
   - gxx=12
-  - armadillo
   - pip:
       - numpy
-      - docplex
       - cplex
+      - docplex
+      - "-e sscfl"

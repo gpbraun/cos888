@@ -1,7 +1,7 @@
 """
 COS888
 
-Classe para Instâncias do SSCFL.
+sscfl_instance.py
 
 Gabriel Braun, 2025
 """
@@ -12,7 +12,7 @@ from pathlib import Path
 
 import numpy as np
 
-INSTANCES_DIR = Path(__file__).resolve().parent.joinpath("_instances")
+INSTANCES_DIR = Path(__file__).resolve().parent.parent.joinpath("data")
 
 
 @dataclass(frozen=True)

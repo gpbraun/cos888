@@ -30,9 +30,6 @@ TSCFLSolverCplex::TSCFLSolverCplex(const TSCFLInstance &inst_)
     cplex.setParam(IloCplex::Param::RootAlgorithm, IloCplex::Primal);
     cplex.setParam(IloCplex::Param::Benders::Strategy, IloCplex::BendersFull);
     cplex.setParam(IloCplex::Param::MIP::Tolerances::MIPGap, MIP_GAP);
-
-    // Nodos (0 = apenas relaxação linear)
-    cplex.setParam(IloCplex::Param::MIP::Limits::Nodes, 0);
 }
 
 TSCFLSolverCplex::~TSCFLSolverCplex()
@@ -107,4 +104,52 @@ TSCFLSolverCplex::solve(bool log_output, double time_limit)
 
     // Log final
     printSummary("CPLEX");
+}
+
+void
+TSCFLSolverCplex::solveLP(bool log_output, double time_limit)
+{
+    IloModel model_lp(env);
+    model_lp.add(model);
+    IloCplex cplex_lp(model_lp);
+
+    // Controle de log
+    if (log_output)
+        {
+            cplex_lp.setOut(env.out());
+            cplex_lp.setWarning(env.out());
+        }
+    else
+        {
+            cplex_lp.setOut(env.getNullStream());
+            cplex_lp.setWarning(env.getNullStream());
+        }
+
+    if (time_limit > 0.0)
+        cplex_lp.setParam(IloCplex::Param::TimeLimit, time_limit);
+
+    // Relaxa var_a e var_b (binárias) para contínuas
+    IloConversion conv_a(env, var_a, ILOFLOAT);
+    IloConversion conv_b(env, var_b, ILOFLOAT);
+
+    model_lp.add(conv_a);
+    model_lp.add(conv_b);
+
+    // Resolve o LP
+    if (cplex_lp.solve())
+        {
+            lp = cplex_lp.getObjValue();
+        }
+
+    status = cplex_lp.getStatus();
+    time = cplex_lp.getTime();
+
+    // Log final
+    // clang-format off
+    std::cout << "\n\n[LP] Solver finalizado.\n\n"
+            << "status = " << status << "\n"
+            << std::fixed << std::setprecision(0) << "LP     = " << lp    << "\n"
+            << std::fixed << std::setprecision(1) << "time   = " << time  << " s\n"
+            << std::defaultfloat;
+    // clang-format on
 }
