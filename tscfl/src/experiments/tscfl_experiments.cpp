@@ -8,10 +8,12 @@ Gabriel Braun, 2025
 
 #include <ilcplex/ilocplex.h>
 
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <string>
+#include <system_error>
 #include <vector>
 
 #include "tscfl.hpp"
@@ -38,6 +40,13 @@ main()
     int status = 0;
     std::string sep = "    ";
 
+    std::error_code ec;
+    std::filesystem::create_directories("out", ec);
+    if (ec)
+        {
+            std::cerr << "Erro ao criar diretorio 'out': " << ec.message() << "\n";
+            return 1;
+        }
     std::ofstream out("out/tscfl_out.txt");
     if (!out)
         {
@@ -60,10 +69,8 @@ main()
                     // Ler instância
                     TSCFLInstance inst = TSCFLInstance::read(env, path);
 
-                    // -----------------------------------------------------------------
                     // [CPLEX] CPLEX
                     // lp, opt, nodes, time
-                    // -----------------------------------------------------------------
                     {
                         TSCFLSolverCplex solver_cplex(inst);
                         solver_cplex.solveLP(false, time_limit);
@@ -81,10 +88,8 @@ main()
                         // clang-format on
                         out.flush();
                     }
-                    // -----------------------------------------------------------------
-                    // [BD] Benders
+                    // [BD] BENDERS
                     // lb, ub, nodes, time
-                    // -----------------------------------------------------------------
                     {
                         // SUBPROBLEMA PRIMAL
                         TSCFLSolverBenders solver_bd1(inst, Subproblem::Mode::PRIMAL);
@@ -134,10 +139,8 @@ main()
                         // clang-format on
                         out.flush();
                     }
-                    // -----------------------------------------------------------------
-                    // [CG] Geração de colunas
+                    // [CG] GERAÇÃO DE COLUNAS
                     // lb, ub, iter, time
-                    // -----------------------------------------------------------------
                     {
                         TSCFLSolverColumnGeneration solver_cg(inst, Subproblem::Mode::NET);
                         solver_cg.solve(false, time_limit);
@@ -154,10 +157,8 @@ main()
                         // clang-format on
                         out.flush();
                     }
-                    // -----------------------------------------------------------------
-                    // [RC] Non-Delayed Relax-and-Cut via subgradiente
+                    // [RC] NON-DELAYED RELAX-AND-CUT
                     // lb, ub, iter, time
-                    // -----------------------------------------------------------------
                     {
                         // CAPACIDADES RELAXADAS
                         TSCFLSolverSubgradient solver_rc1(inst, LRP::Mode::CAPACITIES);

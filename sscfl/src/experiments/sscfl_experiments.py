@@ -6,6 +6,7 @@ sscfl_experiments.py
 Gabriel Braun, 2025
 """
 
+from pathlib import Path
 from typing import Iterable
 
 from sscfl import SSCFLInstance, SSCFLSolverCP, SSCFLSolverMP
@@ -21,12 +22,14 @@ SEP = "    "
 
 def run_experiments(
     instances: Iterable[str],
-    output_path: str = "out/sscfl_out.txt",
+    output_path: str = Path("out/sscfl_out.txt"),
     time_limit: float | None = 100.0,
 ):
     """
     Roda MP e CP para cada instância e imprime resumo no formato desejado.
     """
+    Path(output_path).parent.mkdir(exist_ok=True)
+
     with open(output_path, "w", encoding="utf-8") as f:
         f.write("=" * 52 + "\n")
 
