@@ -79,11 +79,11 @@ TSCFLSolverSubgradient::solve(bool log_output, IloNum time_limit)
             // Separa e gerencia os cortes
             if (LR.mode == LRP::Mode::CAPACITIES)
                 {
-                    LR.separate_flow_covers(MAX_NEW_CUTS);
+                    LR.separateFlowCovers(MAX_NEW_CUTS);
                 }
             else if (LR.mode == LRP::Mode::BALANCES)
                 {
-                    LR.separate_subset_rows(MAX_NEW_CUTS);
+                    LR.separateSubsetRows(MAX_NEW_CUTS);
                 }
 
             cuts.updateStatus(LR.x, LR.y, LR.a, LR.b, EXTRA_AGE);

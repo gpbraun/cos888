@@ -14,8 +14,6 @@ Gabriel Braun, 2025
 #include "tscfl_instance.hpp"
 #include "tscfl_utils.hpp"
 
-ILOSTLBEGIN
-
 // SOLVER DA RELAXAÇÃO LAGRANGEANA: Base
 class LRP
 {
@@ -59,10 +57,10 @@ class LRP
     virtual IloNum norm2sq() const = 0;
 
     // Separa cortes FlowCovers a partir da solução LR atual
-    IloInt separate_flow_covers(IloInt max_new_cuts);
+    IloInt separateFlowCovers(IloInt max_new_cuts);
 
     // Separa cortes SubsetRow a partir da solução LR atual
-    IloInt separate_subset_rows(IloInt max_new_cuts);
+    IloInt separateSubsetRows(IloInt max_new_cuts);
 
     // Acesso ao conjunto de cortes
     CutManager &

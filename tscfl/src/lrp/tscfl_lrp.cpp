@@ -42,7 +42,7 @@ LRP::create(const TSCFLInstance &inst, Mode mode_)
 }
 
 IloInt
-LRP::separate_flow_covers(IloInt max_new_cuts)
+LRP::separateFlowCovers(IloInt max_new_cuts)
 {
     if (max_new_cuts <= 0)
         return 0;
@@ -237,7 +237,7 @@ LRP::separate_flow_covers(IloInt max_new_cuts)
 }
 
 IloInt
-LRP::separate_subset_rows(IloInt max_new_cuts)
+LRP::separateSubsetRows(IloInt max_new_cuts)
 {
     if (max_new_cuts <= 0)
         return 0;
