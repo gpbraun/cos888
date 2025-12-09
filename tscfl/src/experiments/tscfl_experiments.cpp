@@ -25,16 +25,16 @@ main()
 
     // Lista de instâncias a serem rodadas
     const std::vector<std::string> instance_paths = {
-        // "tscfl/data/fernandes/tscfl_050_100_200_a.txt",
-        // "tscfl/data/fernandes/tscfl_050_100_200_b.txt",
-        // "tscfl/data/fernandes/tscfl_050_100_200_c.txt",
-        // "tscfl/data/fernandes/tscfl_050_100_200_d.txt",
-        // "tscfl/data/fernandes/tscfl_050_100_200_e.txt",
-        // "tscfl/data/fernandes/tscfl_100_200_400_a.txt",
-        // "tscfl/data/fernandes/tscfl_100_200_400_b.txt",
-        // "tscfl/data/fernandes/tscfl_100_200_400_c.txt",
-        // "tscfl/data/fernandes/tscfl_100_200_400_d.txt",
-        // "tscfl/data/fernandes/tscfl_100_200_400_e.txt",
+        "tscfl/data/fernandes/tscfl_050_100_200_a.txt",
+        "tscfl/data/fernandes/tscfl_050_100_200_b.txt",
+        "tscfl/data/fernandes/tscfl_050_100_200_c.txt",
+        "tscfl/data/fernandes/tscfl_050_100_200_d.txt",
+        "tscfl/data/fernandes/tscfl_050_100_200_e.txt",
+        "tscfl/data/fernandes/tscfl_100_200_400_a.txt",
+        "tscfl/data/fernandes/tscfl_100_200_400_b.txt",
+        "tscfl/data/fernandes/tscfl_100_200_400_c.txt",
+        "tscfl/data/fernandes/tscfl_100_200_400_d.txt",
+        "tscfl/data/fernandes/tscfl_100_200_400_e.txt",
     };
 
     IloEnv env;
@@ -191,12 +191,12 @@ main()
         }
     catch (const IloException &e)
         {
-            std::cerr << "CPLEX Error: " << e.getMessage() << "\n";
+            std::cerr << "Erro do CPLEX: " << e.getMessage() << "\n";
             status = 1;
         }
     catch (const std::exception &e)
         {
-            std::cerr << "Error: " << e.what() << "\n";
+            std::cerr << "Erro: " << e.what() << "\n";
             status = 1;
         }
 
