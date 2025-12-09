@@ -58,6 +58,15 @@ TSCFLSolverCplex::buildModel()
     for (IloInt k = 0; k < inst.nK; ++k)
         model.add(IloSum(var_y.col(k)) == inst.r[k]);
 
+    // Desigualdades válidas (fortalecem a relaxação linear)
+    for (IloInt i = 0; i < inst.nI; ++i)
+        for (IloInt j = 0; j < inst.nJ; ++j)
+            model.add(var_x[i][j] <= inst.p[i] * var_a[i]);
+
+    for (IloInt j = 0; j < inst.nJ; ++j)
+        for (IloInt k = 0; k < inst.nK; ++k)
+            model.add(var_y[j][k] <= inst.r[k] * var_b[j]);
+
     // FUNÇÃO OBJETIVO
     IloObjective obj = IloMinimize(
         env,
@@ -128,7 +137,7 @@ TSCFLSolverCplex::solveLP(bool log_output, double time_limit)
     if (time_limit > 0.0)
         cplex_lp.setParam(IloCplex::Param::TimeLimit, time_limit);
 
-    // Relaxa var_a e var_b (binárias) para contínuas
+    // Relaxa var_a e var_b (binárias) para contínuas [0, 1]
     IloConversion conv_a(env, var_a, ILOFLOAT);
     IloConversion conv_b(env, var_b, ILOFLOAT);
 
@@ -147,9 +156,9 @@ TSCFLSolverCplex::solveLP(bool log_output, double time_limit)
     // Log final
     // clang-format off
     std::cout << "\n\n[LP] Solver finalizado.\n\n"
-            << "status = " << status << "\n"
-            << std::fixed << std::setprecision(0) << "LP     = " << lp    << "\n"
-            << std::fixed << std::setprecision(1) << "time   = " << time  << " s\n"
-            << std::defaultfloat;
+              << "status = " << status << "\n"
+              << std::fixed << std::setprecision(0) << "LP     = " << lp    << "\n"
+              << std::fixed << std::setprecision(1) << "time   = " << time  << " s\n"
+              << std::defaultfloat;
     // clang-format on
 }

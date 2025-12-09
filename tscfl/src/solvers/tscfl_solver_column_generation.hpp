@@ -47,7 +47,7 @@ class TSCFLSolverColumnGeneration : public TSCFLSolver
 
   public:
     explicit TSCFLSolverColumnGeneration(
-        const TSCFLInstance &inst_, Subproblem::Mode smode = Subproblem::Mode::NET
+        const TSCFLInstance &inst_, Subproblem::Mode sp_mode = Subproblem::Mode::NET
     );
 
     ~TSCFLSolverColumnGeneration() override;

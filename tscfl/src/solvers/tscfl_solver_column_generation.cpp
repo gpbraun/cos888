@@ -12,12 +12,12 @@ Gabriel Braun, 2025
 #include <iostream>
 
 TSCFLSolverColumnGeneration::TSCFLSolverColumnGeneration(
-    const TSCFLInstance &inst_, Subproblem::Mode smode
+    const TSCFLInstance &inst_, Subproblem::Mode sp_mode
 )
     : TSCFLSolver(inst_),
       model(env),
       cplex(env),
-      subproblem(Subproblem::create(inst_, smode)),
+      subproblem(Subproblem::create(inst_, sp_mode)),
       obj(env),
       var_a(env, inst_.nI, 0.0, 1.0),
       var_b(env, inst_.nJ, 0.0, 1.0),
@@ -83,15 +83,6 @@ TSCFLSolverColumnGeneration::buildModel()
             e.end();
         }
 
-    // Restrições de convexidade/demanda por cliente: constr_m2[k]
-    for (IloInt k = 0; k < inst.nK; ++k)
-        {
-            IloExpr e(env);
-            constr_m2[k] = (e == 1.0);
-            model.add(constr_m2[k]);
-            e.end();
-        }
-
     // Restrição de vínculo: z_{k,t} <= b_j  (para par (j,k))
     for (IloInt j = 0; j < inst.nJ; ++j)
         for (IloInt k = 0; k < inst.nK; ++k)
@@ -102,6 +93,15 @@ TSCFLSolverColumnGeneration::buildModel()
                 model.add(constrs_v[j][k]);
                 e.end();
             }
+
+    // Restrições de convexidade/demanda por cliente: constr_m2[k]
+    for (IloInt k = 0; k < inst.nK; ++k)
+        {
+            IloExpr e(env);
+            constr_m2[k] = (e == 1.0);
+            model.add(constr_m2[k]);
+            e.end();
+        }
 
     // FUNÇÃO OBJETIVO
     obj = IloMinimize(env, IloScalProd(inst.f, var_a) + IloScalProd(inst.g, var_b));
